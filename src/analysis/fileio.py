@@ -94,6 +94,15 @@ class SourceFile(FileBase):
             return start
         raise ValueError("Not reading START_TIME")
 
+    @property
+    def pressure(self) -> float:
+        """Pressure of the gas in the detector extracted from the file name.
+        """
+        match = re.search(r"P(\d+)", self.file_path.name)
+        if match is not None:
+            return float(match.group(1))
+        return 0.0
+
 
 class PulsatorFile(FileBase):
     """Class to analyze a calibration pulse file.

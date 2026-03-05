@@ -40,6 +40,14 @@ from .utils import (
 )
 
 
+XAXIS_LABELS = dict(
+    back="Voltage [V]",
+    drift="Drift Voltage [V]",
+    time="Time [hours]",
+    pressure="Pressure [mbar]"
+)
+
+
 def calibration(context: Context) -> Context:
     """Perform the calibration of the detector using pulse data at fixed voltages.
 
@@ -168,13 +176,23 @@ def gain_task(context: Context, task: GainConfig) -> Context:
     """
     name = task.task
     target = task.target
+    xaxis = task.xaxis
     # Get the file names from the fit context keys
     file_names = context.file_names
     # Create empty arrays to store gain values and voltages
     gain_vals = np.zeros(len(file_names), dtype=object)
     voltages = np.zeros(len(file_names))
+    drift_voltages = np.zeros(len(file_names))
+    pressures = np.zeros(len(file_names))
+    start_times = np.zeros(len(file_names), dtype=object)
+    real_times = np.zeros(len(file_names))
     # Iterate over all files and calculate the gain
     for i, file_name in enumerate(file_names):
+        source = context.source(file_name)
+        start_times[i] = source.start_time
+        real_times[i] = source.real_time
+        drift_voltages[i] = source.drift_voltage
+        pressures[i] = source.pressure
         target_ctx = context.target_ctx(file_name, target)
         line_val = target_ctx.line_val
         voltages[i] = target_ctx.voltage
@@ -183,12 +201,17 @@ def gain_task(context: Context, task: GainConfig) -> Context:
                                    context.config.source.energy)
         gain_vals[i] = target_ctx.gain_val
     # Save the results in the context
-    context.add_task_results(name, target, dict(voltages=voltages, gain_vals=gain_vals))
+    times = amptek_accumulate_time(start_times, real_times) / 3600
+    context.add_task_results(name, target, dict(voltages=voltages,
+                                                drifts=drift_voltages,
+                                                pressures=pressures,
+                                                times=times,
+                                                gain_vals=gain_vals))
     # If only a single file is analyzed, return the context without plotting or fitting
     if len(file_names) == 1:
         return context
     model = None
-    if task.fit:
+    if task.fit and xaxis == "back":
         model = aptapy.models.Exponential()
         model.fit(voltages, unumpy.nominal_values(gain_vals),
                   sigma=unumpy.std_devs(gain_vals), absolute_sigma=True)
@@ -196,14 +219,20 @@ def gain_task(context: Context, task: GainConfig) -> Context:
     # Define the plot keyword arguments for style and labels
     style = context.config.style.tasks.get(name, PlotStyleConfig()).model_dump()
     plot_kwargs = dict(
-        xlabel="Voltage [V]",
+        xlabel=XAXIS_LABELS[xaxis],
         ylabel="Gain",
         fig_name=f"gain_{target}",
         model0_label=get_model_label(name, model) if task.fit else None,
         show=task.show,
         **style)
     # Create the figure for the gain
-    fig = plot_task(voltages, gain_vals, model, **plot_kwargs)
+    xaxis_data = dict(
+        back=voltages,
+        drift=drift_voltages,
+        pressure=pressures,
+        time=times
+    )
+    fig = plot_task(xaxis_data[xaxis], gain_vals, model, **plot_kwargs)
     # Add the figure to the context
     context.add_figure(name, fig)
     return context
@@ -243,10 +272,10 @@ def gain_trend(context: Context, task: TrendGainConfig) -> Context:
         # Access the target context and extract line value and voltage
         target_ctx = context.target_ctx(file_name, target)
         line_val = target_ctx.line_val
-        target_ctx.gain_val = gain(context.config.source.w,
+        target_ctx.res_val = gain(context.config.source.w,
                                    line_val,
                                    context.config.source.energy)
-        gain_vals[i] = target_ctx.gain_val
+        gain_vals[i] = target_ctx.res_val
     # Calculate the accumulated time in hours
     times = amptek_accumulate_time(start_times, real_times) / 3600
     # Save the results in the context
@@ -456,35 +485,56 @@ def resolution_task(context: Context, task: ResolutionConfig) -> Context:
     """
     name = task.task
     target = task.target
+    xaxis = task.xaxis
     # Get the file names from the fit context keys
     file_names = context.file_names
     # Create empty arrays to store resolution values and voltages
     res_vals = np.zeros(len(file_names), dtype=object)
     voltages = np.zeros(len(file_names))
+    drift_voltages = np.zeros(len(file_names))
+    pressures = np.zeros(len(file_names))
+    start_times = np.zeros(len(file_names), dtype=object)
+    real_times = np.zeros(len(file_names))
     # Iterate over all files and calculate the gain
     for i, file_name in enumerate(file_names):
         # Access the target context and extract line value, sigma and voltage
+        source = context.source(file_name)
         target_ctx = context.target_ctx(file_name, target)
         line_val = target_ctx.line_val
         sigma = target_ctx.sigma
+        start_times[i] = source.start_time
+        real_times[i] = source.real_time
+        pressures[i] = source.pressure
+        drift_voltages[i] = source.drift_voltage
         voltages[i] = target_ctx.voltage
         target_ctx.res_val = energy_resolution(line_val, sigma)
         res_vals[i] = target_ctx.res_val
     # Save the results in the context
-    context.add_task_results(name, target, dict(voltages=voltages, res_vals=res_vals))
+    times = amptek_accumulate_time(start_times, real_times) / 3600
+    context.add_task_results(name, target, dict(voltages=voltages,
+                                                drifts=drift_voltages,
+                                                pressures=pressures,
+                                                times=times,
+                                                res_vals=res_vals))
     # If only a single file is analyzed, return the context without plotting
     if len(file_names) == 1:
         return context
     # Define the plot keyword arguments for style and labels
     style = context.config.style.tasks.get(name, PlotStyleConfig()).model_dump()
     plot_kwargs = dict(
-        xlabel="Voltage [V]",
+        xlabel=XAXIS_LABELS[xaxis],
         ylabel=r"$\Delta$E/E",
         fig_name=f"resolution_{target}",
         show=task.show,
         **style)
     # Create the figure for the resolution trend
-    fig = plot_task(voltages, res_vals, **plot_kwargs)
+    xaxis_data = dict(
+        back=voltages,
+        drift=drift_voltages,
+        pressure=pressures,
+        time=times,
+    )
+    fig = plot_task(xaxis_data[xaxis], res_vals, **plot_kwargs)
     # Add the figure to the context
     context.add_figure(name, fig)
     return context

@@ -155,6 +155,8 @@ def plot_task(xdata: np.ndarray, ydata: np.ndarray, *models: AbstractFitModel,
     )
     # Plot all models
     for i, model in enumerate(models):
+        if model is None:
+            continue
         model_label = kwargs.get(f"model{i}_label")
         fit_output = kwargs.get("fit_output", False)
         if isinstance(model, FitModelSum):

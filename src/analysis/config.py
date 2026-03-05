@@ -140,6 +140,7 @@ class SourceConfig(BaseModel):
 class TaskDefaults:
     """Default values for the analysis tasks.
     """
+    xaxis: str = "back"
     fit: bool = True
     show: bool = True
     energy_threshold: float = 1.5 # keV
@@ -157,6 +158,9 @@ class GainConfig(BaseModel):
         Name of the task, to perform it must be 'gain'.
     target: str
         The target name of the fitting subtask to use for the gain calculation.
+    xaxis: str, optional
+        The x-axis to use for the gain plot. The choices are between 'back', 'drift', 'time' and
+        'pressure'. Default is 'back'.
     fit: bool, optional
         Whether to fit the gain values with an exponential function of the voltage. If a single
         source file is analyzed, the fit is not performed. Default is True.
@@ -166,9 +170,9 @@ class GainConfig(BaseModel):
     """
     task: Literal["gain"]
     target: str
+    xaxis: str = TaskDefaults.xaxis
     fit: bool = TaskDefaults.fit
     show: bool = TaskDefaults.show
-
 
 class DriftConfig(BaseModel):
     """Perform the analysis of the gain as a function of drift voltage for each source file using
@@ -211,12 +215,16 @@ class ResolutionConfig(BaseModel):
         Name of the task, to perform it must be 'resolution'.
     target: str
         The target name of the fitting subtask to use for the resolution calculation.
+    xaxis: str, optional
+        The x-axis to use for the resolution plot. The choices are between 'back', 'drift' 'time'
+        and 'pressure'. Default is 'back'.
     show: bool, optional
         Whether to generate and show the plot of the resolution values as a function of the back
         voltage. If a single source file is analyzed, the plot is not generated. Default is True.
     """
     task: Literal["resolution"]
     target: str
+    xaxis: str = TaskDefaults.xaxis
     show: bool = TaskDefaults.show
 
 
