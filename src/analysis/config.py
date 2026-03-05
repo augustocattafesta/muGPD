@@ -281,6 +281,7 @@ class CompareGainConfig(BaseModel):
     """
     task: Literal["compare_gain"]
     target: str
+    xaxis: str = TaskDefaults.xaxis
     combine: list[str] = CompareTaskDefaults.combine
     show: bool = TaskDefaults.show
 

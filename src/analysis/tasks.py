@@ -292,6 +292,13 @@ def compare_gain(context: FoldersContext, task: CompareGainConfig) -> FoldersCon
     name = task.task
     target = task.target
     combine = task.combine
+    xaxis = task.xaxis
+    xaxis_data = dict(
+        back="voltages",
+        drift="drift_voltages",
+        pressure="pressures",
+        time="times"
+    )
     folders_style = context.config.style.folders
     # Get the different folder names
     folder_names = context.folder_names
@@ -306,21 +313,26 @@ def compare_gain(context: FoldersContext, task: CompareGainConfig) -> FoldersCon
     for folder_name in folder_names:
         folder_ctx = context.folder_ctx(folder_name)
         folder_gain = folder_ctx.task_results("gain", target)
-        gain_vals = folder_gain.get("gain_vals", [])
-        voltages = folder_gain.get("voltages", [])
+        gain_vals = folder_gain["gain_vals"]
+        xdata = folder_gain[xaxis_data[xaxis]]
         # If not aggregating, plot each folder separately
         if folder_name not in combine:
             style = folders_style.get(folder_name, PlotStyleConfig()).model_dump()
-            model = folder_gain.get("model", None)
+            # Be careful because if the fit was performed with another xaxis quantity there might
+            # be a mismatch between the xdata and the model. We can try to fix this in the future.
+            model = None
+            models = [v['model'] for v in folder_gain.values() if isinstance(v, dict) and 'model' in v]
+            if models:
+                model = models[0]
             plot_kwargs = dict(
                 model_label=get_model_label(name, model) if model else None,
                 **style)
-            plot_compare_task(ax, voltages, gain_vals, model, **plot_kwargs)
+            plot_compare_task(ax, xdata, gain_vals, model, **plot_kwargs)
         # If aggregating, store the data together for later fitting and plotting
         else:
             y[j] = unumpy.nominal_values(gain_vals)
             yerr[j] = unumpy.std_devs(gain_vals)
-            x[j] = voltages
+            x[j] = xdata
             j += 1
     if combine:
         # Concatenate all data and fit with an exponential model
@@ -345,7 +357,7 @@ def compare_gain(context: FoldersContext, task: CompareGainConfig) -> FoldersCon
     if task_style["title"] is not None:
         plt.title(task_style["title"])
     # Set the labels and the axis scales
-    plt.xlabel("Voltage [V]")
+    plt.xlabel(XAXIS_LABELS[xaxis])
     plt.ylabel("Gain")
     plt.xscale(task_style["xscale"])
     plt.yscale(task_style["yscale"])
