@@ -12,7 +12,6 @@ from .tasks import (
     drift,
     fit_peak,
     gain_task,
-    gain_trend,
     plot_spectrum,
     resolution_escape,
     resolution_task,
@@ -23,7 +22,6 @@ TaskFunctionFolders = Callable[..., FoldersContext]
 
 TASK_REGISTRY: dict[str, TaskFunction] = {
     "gain": gain_task,
-    "gain_trend": gain_trend,
     "resolution": resolution_task,
     "resolution_escape": resolution_escape,
     "drift": drift,

@@ -10,8 +10,9 @@ pipeline:
         model: Fe55Forest
 
   # Execute the gain_trend task on the main line of the spectrum
-  - task: gain_trend
+  - task: gain
     target: main
+    xaxis: time
     # Fit the gain trend
     subtasks:
       - target: charging

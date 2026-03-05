@@ -1,3 +1,5 @@
+from aptapy.plotting import plt
+
 from analysis.runner import run, run_folders
 from analysis import ANALYSIS_DOCS
 
@@ -20,10 +22,11 @@ folder_gain_fig.savefig(FIGURES_PATH / "folder_gain.png")
 folder_resolution_fig = context._figures["resolution"]
 folder_resolution_fig.savefig(FIGURES_PATH / "folder_resolution.png")
 
+plt.close("all")
 gain_trend_path = EXAMPLES_PATH / "data/gain_trend"
 gain_trend_config_path = EXAMPLES_PATH / "gain_trend_example_config.yaml"
 context = run(gain_trend_config_path, gain_trend_path)
-gain_trend_fig = context._figures["gain_trend"]
+gain_trend_fig = context._figures["gain"]
 gain_trend_fig.savefig(FIGURES_PATH / "gain_trend.png")
 
 folder1_path = EXAMPLES_PATH / "data/folder1"

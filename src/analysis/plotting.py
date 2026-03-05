@@ -10,6 +10,14 @@ from .context import TargetContext
 from .fileio import SourceFile
 
 
+XAXIS_LABELS = dict(
+    back="Voltage [V]",
+    drift="Drift Voltage [V]",
+    time="Time [hours]",
+    pressure="Pressure [mbar]"
+)
+
+
 def write_legend(label: str | None, *axs: plt.Axes | None, loc: str = "best" ) -> None:
     # pylint: disable=protected-access
     valid_axs: list[plt.Axes] = [ax for ax in axs if ax is not None]
