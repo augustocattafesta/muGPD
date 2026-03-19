@@ -3,8 +3,9 @@
 
 import datetime
 import inspect
-import pathlib
 import re
+from collections.abc import Iterable
+from pathlib import Path
 
 import aptapy.modeling
 import numpy as np
@@ -12,13 +13,13 @@ import yaml
 from aptapy.hist import Histogram1d
 from uncertainties import unumpy
 
-from . import ANALYSIS_RESOURCES
+from . import ANALYSIS_DATA, ANALYSIS_RESOURCES
 
 
 class FileBase:
     """Load data from a file and define the path and the histogram.
     """
-    def __init__(self, file_path: pathlib.Path) -> None:
+    def __init__(self, file_path: Path) -> None:
         """Class constructor.
 
         Arguments
@@ -33,7 +34,7 @@ class FileBase:
 class SourceFile(FileBase):
     """Class to analyze a source file and extract relevant quantities from the name of the file.
     """
-    def __init__(self, file_path: pathlib.Path,
+    def __init__(self, file_path: Path,
                  charge_conv_model: aptapy.modeling.AbstractFitModel | None = None) -> None:
         super().__init__(file_path)
         if charge_conv_model is not None:
@@ -127,12 +128,12 @@ class PulsatorFile(FileBase):
 
 
 class Folder:
-    def __init__(self, folder_path: pathlib.Path) -> None:
+    def __init__(self, folder_path: Path) -> None:
         """Class constructor.
 
         Parameters
         ----------
-        folder_path : pathlib.Path
+        folder_path : Path
             Path of the folder to open.
         """
         self.folder_path = folder_path
@@ -142,7 +143,7 @@ class Folder:
         self.input_files = list(folder_path.iterdir())
 
     @property
-    def source_files(self) -> list[pathlib.Path]:
+    def source_files(self) -> list[Path]:
         """Extract the source files from all the files of the directory and return a sorted list
         of the files. If file names contain "trend{i}", the sorting is done numerically according
         to the index {i}, otherwise it's done alphabetically.
@@ -150,7 +151,7 @@ class Folder:
         # Keep files containing _B<number>
         filtered = [_f for _f in self.input_files if re.search(r"B\d+", _f.name)]
 
-        def numeric_sort_key(p: pathlib.Path):
+        def numeric_sort_key(p: Path):
             """Sort the files with numerical order.
             """
             numbers = [int(x) for x in re.findall(r"\d+", p.stem)]
@@ -159,7 +160,7 @@ class Folder:
         return sorted(filtered, key=numeric_sort_key)
 
     @property
-    def pulse_file(self) -> pathlib.Path:
+    def pulse_file(self) -> Path:
         """Extract the calibration pulse files from all the files of the directory and return
         the path of the first file in the list.
         """
@@ -191,3 +192,43 @@ def load_label(key: str) -> str | None:
     except (FileNotFoundError, TypeError, KeyError):
         pass
     return label_value
+
+
+def check_source_paths(paths: Iterable[str | Path]) -> tuple[list[Path], str]:
+    """Check if source paths exist and are either all files or all folders.
+    
+    Parameters
+    ----------
+    paths : Iterable[str | Path]
+        List of paths to check.
+    
+    Returns
+    -------
+    checked_paths : tuple[list[Path], str]
+        A tuple containing the list of checked paths and a string indicating
+        whether they are 'file' or 'folder'.
+    """
+    # Create a list to hold the checked paths
+    checked_paths = []
+    # Loop through the paths and check if they exist. If the given path does not exist, check
+    # if it exists in the ANALYSIS_DATA folder.
+    for p in paths:
+        path = Path(p)
+        if not path.exists():
+            file_path = ANALYSIS_DATA / path
+            if not file_path.exists():
+                # Raise an error if the path does not exist in either location
+                raise FileNotFoundError(f"Data path {p} does not exist.")
+            path = file_path
+        checked_paths.append(path)
+    if not checked_paths:
+        raise ValueError("No valid paths provided.")
+    # Check if all paths are either files or folders
+    is_file = [p.is_file() for p in checked_paths]
+    is_folder = [p.is_dir() for p in checked_paths]
+    # Return the checked paths and their type
+    if all(is_file):
+        return checked_paths, "file"
+    if all(is_folder):
+        return checked_paths, "folder"
+    raise ValueError("All source paths must be either files or folders.")

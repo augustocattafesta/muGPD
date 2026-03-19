@@ -7,6 +7,7 @@ from aptapy.modeling import AbstractFitModel
 from aptapy.plotting import last_line_color, plt
 from uncertainties import unumpy
 
+from ._logger import log
 from .config import (
     CompareGainConfig,
     CompareResolutionConfig,
@@ -96,7 +97,9 @@ def calibration(context: Context) -> Context:
     hist.plot()
     # Find pulses and fit them with Gaussian models to find their positions
     xpeaks, _ = find_peaks_iterative(hist.bin_centers(), hist.content, pulse.num_pulses)
+    log.info(f"Found {len(xpeaks)} peaks in the pulse data")
     mu_peak = np.zeros(pulse.num_pulses, dtype=object)
+    log.info("Fitting pulses")
     for i, xpeak in enumerate(xpeaks):
         peak_model = aptapy.models.Gaussian()
         xmin = xpeak - np.sqrt(xpeak)
@@ -104,13 +107,16 @@ def calibration(context: Context) -> Context:
         peak_model.fit_iterative(hist, xmin=xmin, xmax=xmax, absolute_sigma=True)
         mu_peak[i] = peak_model.mu.ufloat()
         peak_model.plot(fit_output=True)
+    log.success("Pulse fitting completed")
     plt.legend()
     # Fit the data to find the calibration parameters
     ylabel = "Charge [fC]" if config["charge_conversion"] else "Voltage [mV]"
     model = aptapy.models.Line("Calibration", "ADC Channel", ylabel)
     xdata = unumpy.nominal_values(mu_peak)
     ydata = pulse.voltage
+    log.info("Fitting calibration model")
     model.fit(xdata, ydata)
+    log.success("Calibration model fitted")
     # Plot the calibration results
     cal_fig = plt.figure("Calibration")
     plt.errorbar(xdata, ydata, fmt=".k", label="Data")
@@ -147,6 +153,7 @@ def fit_peak(context: Context, subtask: FitSubtaskConfig) -> Context:
     # Access target, model and fit parameters
     target = subtask.target
     model = load_class(subtask.model)[0]()
+    log.info(f"Fitting target {target} with model {model.__class__.__name__}")
     fit_pars = subtask.fit_pars
     # Access the last source data added to the context and get the histogram
     source = context.last_source
@@ -157,6 +164,7 @@ def fit_peak(context: Context, subtask: FitSubtaskConfig) -> Context:
     if fit_pars.xmin == float("-inf") and fit_pars.xmax == float("inf"):
         kwargs["xmin"] = x_peak - 0.3 * np.sqrt(x_peak)
         kwargs["xmax"] = x_peak + 0.3 * np.sqrt(x_peak)
+    log.info(f"Starting fitting range: {kwargs['xmin']} to {kwargs['xmax']}")
     # Fit the data. We only support Gaussian and Fe55Forest models.
     if isinstance(model, aptapy.models.Fe55Forest):
         model.intensity1.freeze(0.16)   # type: ignore[attr-defined]
@@ -171,6 +179,7 @@ def fit_peak(context: Context, subtask: FitSubtaskConfig) -> Context:
         sigma = model.status.correlated_pars[2]
     else:
         raise TypeError(f"Model of type {type(model)} not supported in fit_peak task")
+    log.success(f"Fitting of target {target} completed")
     # Update the context with the fit results
     target_ctx = TargetContext(target, line_val, sigma, source.voltage, model)
     target_ctx.energy = context.config.acquisition.e_peak
@@ -665,7 +674,8 @@ def drift(context: Context, task: DriftConfig) -> Context:
         integration_time = source.real_time
         target_ctx = context.target_ctx(file_name, target)
         line_val = target_ctx.line_val
-        gain_vals[i] = gain(context.config.source.w, line_val, context.config.source.energy)
+        gain_vals[i] = gain(context.config.source.w, line_val,
+                            context.config.source.energy)
         # Calculate the threshold in charge and calculate the rate
         charge_thr = (task.energy_threshold / context.config.source.energy) * line_val
         hist = source.hist

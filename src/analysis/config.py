@@ -10,6 +10,20 @@ from pydantic import BaseModel, Field
 from .utils import KALPHA
 
 
+class AbstractConfig(BaseModel):
+    """Abstract base class for the configuration of the analysis tasks.
+    """
+
+    def __str__(self) -> str:
+        """Return a string representation of the configuration object, showing the class name, the
+        field names and their values.
+        """
+        out = f"{self.__class__.__name__}:\n"
+        for field in self:
+            out += f"\t{field[0]}: {field[1]}\n"
+        return out
+
+
 @dataclass(frozen=True)
 class CalibrationDefaults:
     """Default values for the calibration task.
@@ -18,7 +32,7 @@ class CalibrationDefaults:
     show: bool = False
 
 
-class CalibrationConfig(BaseModel):
+class CalibrationConfig(AbstractConfig):
     """Perform the detector calibration using pulse data at fixed voltages.
 
     Attributes
@@ -48,7 +62,7 @@ class FitPeakDefaults:
     p0: list[float] | None = None
 
 
-class FitPars(BaseModel):
+class FitPars(AbstractConfig):
     """Parameters for spectrum fitting subtasks.
 
     Attributes
@@ -75,7 +89,7 @@ class FitPars(BaseModel):
     p0: list[float] | None = FitPeakDefaults.p0
 
 
-class FitSubtaskConfig(BaseModel):
+class FitSubtaskConfig(AbstractConfig):
     """Define a subtask for fitting data.
 
     Attributes
@@ -96,7 +110,7 @@ class FitSubtaskConfig(BaseModel):
     fit_pars: FitPars = Field(default_factory=FitPars)
 
 
-class FitSpecConfig(BaseModel):
+class FitSpecConfig(AbstractConfig):
     """Perform the spectrum fitting for each source file using the model and the fit parameters
     defined in the fitting subtasks.
 
@@ -111,6 +125,13 @@ class FitSpecConfig(BaseModel):
     task: Literal["fit_spec"]
     subtasks: list[FitSubtaskConfig]
 
+    def __str__(self) -> str:
+        out = f"{self.__class__.__name__}:\n"
+        out += f"\ttask: {self.task}\n\n"
+        for subtask in self.subtasks:
+            out += f"\t{subtask}"
+        return out
+
 
 @dataclass(frozen=True)
 class SourceDefaults:
@@ -120,7 +141,7 @@ class SourceDefaults:
     w: float = 26.0
 
 
-class SourceConfig(BaseModel):
+class SourceConfig(AbstractConfig):
     """Set the acquisition parameters of the source and the detector.
 
     Attributes
@@ -147,7 +168,7 @@ class TaskDefaults:
     show_rate: bool = True
 
 
-class GainConfig(BaseModel):
+class GainConfig(AbstractConfig):
     """Perform the gain calculation for each source file using the results of the fitting subtasks.
     The gain is calculated as the ratio between the inferred charge from the fit results and the
     expected number of electrons for the given peak energy.
@@ -174,7 +195,7 @@ class GainConfig(BaseModel):
     subtasks: list[FitSubtaskConfig] | None = Field(default=None)
     show: bool = TaskDefaults.show
 
-class DriftConfig(BaseModel):
+class DriftConfig(AbstractConfig):
     """Perform the analysis of the gain as a function of drift voltage for each source file using
     the results of the fitting subtasks. The gain is calculated as the ratio between the inferred
     charge from the fit results and the expected number of electrons for the given peak energy.
@@ -204,7 +225,7 @@ class DriftConfig(BaseModel):
     show: bool = TaskDefaults.show
 
 
-class ResolutionConfig(BaseModel):
+class ResolutionConfig(AbstractConfig):
     """Perform the resolution calculation for each source file using the results of the fitting
     subtasks. The resolution is calculated using the charge calibrated spectra as the FWHM of the
     peak divided by the peak position.
@@ -228,7 +249,7 @@ class ResolutionConfig(BaseModel):
     show: bool = TaskDefaults.show
 
 
-class ResolutionEscapeConfig(BaseModel):
+class ResolutionEscapeConfig(AbstractConfig):
     """Perform the resolution escape calculation for each source file using the results of the
     fitting subtasks. The resolution escape is calculated as the FWHM of the main peak divided
     by the peak position, normalized to the ratio between the distance between the main peak and
@@ -261,7 +282,7 @@ class CompareTaskDefaults:
     combine: list[str] = Field(default_factory=list)
 
 
-class CompareGainConfig(BaseModel):
+class CompareGainConfig(AbstractConfig):
     """Compare the gain vs back voltage curves for multiple source folders. A gain task must be
     performed before the compare gain task.
 
@@ -285,7 +306,7 @@ class CompareGainConfig(BaseModel):
     show: bool = TaskDefaults.show
 
 
-class CompareResolutionConfig(BaseModel):
+class CompareResolutionConfig(AbstractConfig):
     """Compare the resolution vs back voltage curves for multiple source folders. A resolution task
     must be performed before the compare resolution task.
 
@@ -308,7 +329,7 @@ class CompareResolutionConfig(BaseModel):
     show: bool = TaskDefaults.show
 
 
-class CompareTrendConfig(BaseModel):
+class CompareTrendConfig(AbstractConfig):
     """Compare the gain trends as a function of time for multiple folders. A gain trend task must
     be performed before the compare trend task.
 
@@ -338,7 +359,7 @@ class PlotDefaults:
     show: bool = True
 
 
-class PlotConfig(BaseModel):
+class PlotConfig(AbstractConfig):
     """Plot the spectra and the fit results for each source file. It is possible to specify
     different plotting options and choose which fit results to show.
 
@@ -391,7 +412,7 @@ class PlotStyleDefaults:
     annotate_min: bool = False
 
 
-class PlotStyleConfig(BaseModel):
+class PlotStyleConfig(AbstractConfig):
     """Configure the style of the plots. These settings can be configured for each task and folder
     analyzed during the pipeline analysis.
 
@@ -474,24 +495,73 @@ TaskType = CalibrationConfig | FitSpecConfig | GainConfig | ResolutionConfig | \
 
 
 class AppConfig(BaseModel):
-    acquisition: Acquisition = Field(default_factory=Acquisition)
-    # Change source name to avoid confusion with context.source
-    source: SourceConfig = Field(default_factory=SourceConfig)
+    """Configuration class for the analysis pipeline. This class stores all the configuration
+    options for the analysis pipeline.
+
+    Attributes
+    ----------
+    pipeline : list[TaskType]
+        List of analysis tasks to perform. Each task must be one of the TaskType defined above.
+    source : SourceConfig, optional
+        Source acquisition parameters. Default values are defined in SourceConfig.
+    style : StyleConfig, optional
+        Style configuration for the plots. Default values are defined in StyleConfig.
+    acquisition : Acquisition, optional
+        Acquisition information to show in the plots. Default values are defined in Acquisition.
+    """
     pipeline: list[TaskType]
+    source: SourceConfig = Field(default_factory=SourceConfig)
     style: StyleConfig = Field(default_factory=StyleConfig)
+    acquisition: Acquisition = Field(default_factory=Acquisition)
 
     @classmethod
     def from_yaml(cls, path: str | pathlib.Path) -> "AppConfig":
+        """Load the configuration data from a .yaml file and return an AppConfig object.
+
+        Arguments
+        ---------
+        path : str | Path
+            Path to the .yaml configuration file. The file must exist and have a .yaml extension
+            to be loaded correctly.
+        
+        Returns
+        -------
+        AppConfig
+            An AppConfig object containing the configuration data loaded from the .yaml file.
+        """
+        # Check if the path exists and is a .yaml file
+        config_path = pathlib.Path(path)
+        if not config_path.exists() or config_path.suffix.lower() != ".yaml":
+            raise FileNotFoundError(f"Config file {path} does not exist or is not a .yaml file.")
+        # Load the data from the .yaml file and create an AppConfig object
         with open(path, encoding="utf-8") as f:
             return cls(**yaml.safe_load(f))
 
     def to_yaml(self, path: str | pathlib.Path) -> None:
+        """Save the configuration data to a .yaml file.
+
+        Arguments
+        ---------
+        path : str | Path
+            Path to the .yaml configuration file to save.
+        """
+        # Convert the AppConfig object to a dictionary
         data = self.model_dump()
+        # Save the data to the .yaml file
         with open(path, "w", encoding="utf-8") as f:
             yaml.safe_dump(data, f, sort_keys=False, default_flow_style=False)
 
     @property
     def calibration(self) -> CalibrationConfig:
+        """Extract the calibration task configuration from the pipeline configuration and return
+        it. If no calibration task is found in the pipeline, a RuntimeError is raised.
+
+        Returns
+        -------
+        CalibrationConfig
+            The calibration task configuration extracted from the pipeline configuration.
+        """
+        # Loop through the pipeline tasks and return the first one that is a CalibrationConfig.
         _config = next((t for t in self.pipeline if isinstance(t, CalibrationConfig)), None)
         if not _config:
             raise RuntimeError("No calibration task found in the pipeline. Make sure to specify a" \
@@ -500,8 +570,31 @@ class AppConfig(BaseModel):
 
     @property
     def fit_spec(self) -> FitSpecConfig | None:
+        """Extract the fit specification task configuration from the pipeline configuration and
+        return it. If no fit specification task is found in the pipeline, a RuntimeError is raised.
+
+        Returns
+        -------
+        FitSpecConfig
+            The fit specification task configuration extracted from the pipeline configuration.
+        """
         return next((t for t in self.pipeline if isinstance(t, FitSpecConfig)), None)
 
     @property
     def plot(self) -> PlotConfig | None:
+        """Extract the plot task configuration from the pipeline configuration and return it.
+
+        Returns
+        -------
+        PlotConfig
+            The plot task configuration extracted from the pipeline configuration.
+        """
         return next((t for t in self.pipeline if isinstance(t, PlotConfig)), None)
+
+    def __str__(self) -> str:
+        """Return a string representation of the AppConfig object, showing the pipeline tasks and
+        their parameters.
+        """
+        header = "AppConfig:\n"
+        tasks = [f"{t}" for t in self.pipeline]
+        return header + "\n".join(tasks)
