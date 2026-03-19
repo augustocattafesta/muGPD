@@ -1,10 +1,9 @@
 import argparse
-from pathlib import Path
 
 from aptapy.plotting import plt
 
-from analysis import ANALYSIS_DATA, ANALYSIS_RESULTS
-from analysis.runner import run, run_folders
+from analysis import ANALYSIS_RESULTS
+from analysis.runner import run
 
 __description__ = """
 Analysis CLI tool for processing and visualizing data collected with μGPDs. The workflow starts
@@ -15,68 +14,6 @@ The tasks to execute are defined in the provided configuration .yaml file. To se
 create the configuration file, refer to the documentation: 
 https://augustocattafesta.github.io/master_thesis/
 """
-
-def check_source_paths(paths: list[str]) -> tuple[list[Path], str]:
-    """Check if source paths exist and are either all files or all folders.
-    
-    Parameters
-    ----------
-    paths : list[str]
-        List of paths to check.
-    
-    Returns
-    -------
-    checked_paths : tuple[list[Path], str]
-        A tuple containing the list of checked paths and a string indicating
-        whether they are 'file' or 'folder'.
-    """
-    # Create a list to hold the checked paths
-    checked_paths = []
-    # Loop through the paths and check if they exist. If the given path does not exist, check
-    # if it exists in the ANALYSIS_DATA folder.
-    for p in paths:
-        path = Path(p)
-        if not path.exists():
-            file_path = ANALYSIS_DATA / path
-            if not file_path.exists():
-                # Raise an error if the path does not exist in either location
-                raise FileNotFoundError(f"Data path {p} does not exist.")
-            path = file_path
-        checked_paths.append(path)
-    # Check if all paths are either files or folders
-    is_file = [p.is_file() for p in checked_paths]
-    is_folder = [p.is_dir() for p in checked_paths]
-    # Return the checked paths and their type
-    if all(is_file):
-        return checked_paths, "file"
-    if all(is_folder):
-        return checked_paths, "folder"
-    raise ValueError("All source paths must be either files or folders.")
-
-
-def check_config_path(path: str) -> Path:
-    """Check if config path exists.
-    
-    Parameters
-    ----------
-    path : str
-        Path to check.
-
-    Returns
-    -------
-    checked_path : Path
-        The checked path.
-    """
-    # Convert to Path object
-    config_path = Path(path)
-    # Check if the path exists
-    if not config_path.exists():
-        raise FileNotFoundError(f"Config file {path} does not exist.")
-    # Check if the path is a .yaml file
-    if config_path.suffix != ".yaml":
-        raise ValueError("Config file must be a .yaml file.")
-    return config_path
-
 
 def main():
     """Main function for the analysis CLI."""
@@ -112,14 +49,8 @@ def main():
     )
 
     args = parser.parse_args()
-    # Check source paths and config path and convert to Path objects
-    file_paths, path_type = check_source_paths(args.paths)
-    config_file_path = check_config_path(args.config)
-    # Run analysis based on path type
-    if path_type == "file":
-        context = run(config_file_path, *file_paths)
-    else:
-        context = run_folders(config_file_path, *file_paths)
+    # Run the analysis pipeline with the provided configuration and paths
+    context = run(args.config, *args.paths)
     # Plot results if available
     plt.tight_layout()
     # Save results if specified
