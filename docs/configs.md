@@ -21,8 +21,6 @@ In this documentation there is a full explanation of all the tasks that can be e
 
 ::: src.analysis.config.CompareResolutionConfig
 
-::: src.analysis.config.TrendGainConfig
-
 ::: src.analysis.config.CompareTrendConfig
 
 ::: src.analysis.config.DriftConfig
