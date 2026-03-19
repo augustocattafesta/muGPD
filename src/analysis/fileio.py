@@ -221,6 +221,8 @@ def check_source_paths(paths: Iterable[str | Path]) -> tuple[list[Path], str]:
                 raise FileNotFoundError(f"Data path {p} does not exist.")
             path = file_path
         checked_paths.append(path)
+    if not checked_paths:
+        raise ValueError("No valid paths provided.")
     # Check if all paths are either files or folders
     is_file = [p.is_file() for p in checked_paths]
     is_folder = [p.is_dir() for p in checked_paths]

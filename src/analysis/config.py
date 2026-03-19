@@ -127,7 +127,7 @@ class FitSpecConfig(AbstractConfig):
 
     def __str__(self) -> str:
         out = f"{self.__class__.__name__}:\n"
-        out += f"\ttask: {self.task}:\n\n"
+        out += f"\ttask: {self.task}\n\n"
         for subtask in self.subtasks:
             out += f"\t{subtask}"
         return out
@@ -502,7 +502,7 @@ class AppConfig(BaseModel):
     ----------
     pipeline : list[TaskType]
         List of analysis tasks to perform. Each task must be one of the TaskType defined above.
-    source_config : SourceConfig, optional
+    source : SourceConfig, optional
         Source acquisition parameters. Default values are defined in SourceConfig.
     style : StyleConfig, optional
         Style configuration for the plots. Default values are defined in StyleConfig.
@@ -510,7 +510,7 @@ class AppConfig(BaseModel):
         Acquisition information to show in the plots. Default values are defined in Acquisition.
     """
     pipeline: list[TaskType]
-    source_config: SourceConfig = Field(default_factory=SourceConfig)
+    source: SourceConfig = Field(default_factory=SourceConfig)
     style: StyleConfig = Field(default_factory=StyleConfig)
     acquisition: Acquisition = Field(default_factory=Acquisition)
 

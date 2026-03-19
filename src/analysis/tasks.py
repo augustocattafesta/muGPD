@@ -229,9 +229,9 @@ def gain_task(context: Context, task: GainConfig) -> Context:
         target_ctx = context.target_ctx(file_name, target)
         line_val = target_ctx.line_val
         voltages[i] = target_ctx.voltage
-        target_ctx.gain_val = gain(context.config.source_config.w,
+        target_ctx.gain_val = gain(context.config.source.w,
                                    line_val,
-                                   context.config.source_config.energy)
+                                   context.config.source.energy)
         gain_vals[i] = target_ctx.gain_val
     # Save the results in the context
     times = amptek_accumulate_time(start_times, real_times) / 3600
@@ -674,10 +674,10 @@ def drift(context: Context, task: DriftConfig) -> Context:
         integration_time = source.real_time
         target_ctx = context.target_ctx(file_name, target)
         line_val = target_ctx.line_val
-        gain_vals[i] = gain(context.config.source_config.w, line_val,
-                            context.config.source_config.energy)
+        gain_vals[i] = gain(context.config.source.w, line_val,
+                            context.config.source.energy)
         # Calculate the threshold in charge and calculate the rate
-        charge_thr = (task.energy_threshold / context.config.source_config.energy) * line_val
+        charge_thr = (task.energy_threshold / context.config.source.energy) * line_val
         hist = source.hist
         counts = hist.content[hist.bin_centers() > charge_thr.n].sum()
         rates[i] = counts / integration_time
