@@ -171,7 +171,6 @@ class GainConfig(BaseModel):
     task: Literal["gain"]
     target: str
     xaxis: str = TaskDefaults.xaxis
-    fit: bool = TaskDefaults.fit    # TODO: remove this option when subtasks are implemented
     subtasks: list[FitSubtaskConfig] | None = Field(default=None)
     show: bool = TaskDefaults.show
 

@@ -271,7 +271,7 @@ def gain_task(context: Context, task: GainConfig) -> Context:
     # Add the figure to the context
     context.add_figure(name, fig)
     return context
-        
+
 
 def compare_gain(context: FoldersContext, task: CompareGainConfig) -> FoldersContext:
     """Compare the gain of multiple folders vs voltage using the fit results obtained from the
@@ -289,6 +289,7 @@ def compare_gain(context: FoldersContext, task: CompareGainConfig) -> FoldersCon
     context : FoldersContext
         The updated context object containing the gain comparison results.
     """
+    # pylint: disable=too-many-statements
     name = task.task
     target = task.target
     combine = task.combine
@@ -321,7 +322,8 @@ def compare_gain(context: FoldersContext, task: CompareGainConfig) -> FoldersCon
             # Be careful because if the fit was performed with another xaxis quantity there might
             # be a mismatch between the xdata and the model. We can try to fix this in the future.
             model = None
-            models = [v['model'] for v in folder_gain.values() if isinstance(v, dict) and 'model' in v]
+            models = [v['model'] for v in folder_gain.values()
+                      if isinstance(v, dict) and 'model' in v]
             if models:
                 model = models[0]
             plot_kwargs = dict(

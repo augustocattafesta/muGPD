@@ -332,7 +332,8 @@ class Context(ContextBase):
         if file_name not in self._fit:
             raise KeyError(f"File '{file_name}' not found in fit results")
         if target not in self._fit[file_name]:
-            raise KeyError(f"Target subtask '{target}' not found in fit results for file '{file_name}'")
+            raise KeyError(f"Target subtask '{target}' not found in fit results for file" \
+                           f" '{file_name}'")
         return self._fit[file_name][target]
 
     def add_task_results(self, task: str, target: str, results: dict) -> None:
