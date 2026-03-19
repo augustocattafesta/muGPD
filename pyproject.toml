@@ -35,6 +35,7 @@ dev = [
     "ruff",
     "mypy",
     "types-PyYAML",
+    "loguru",
   ]
 docs = [
     "mkdocs-material",
