@@ -109,7 +109,7 @@ class TargetContext:
     def res_escape_val(self, value: UFloat):
         self._res_escape_val = value
         # Set the resolution (escape) label for the spectral plot
-        self._res_escape_label = fr"$\Delta$E/E(esc.): {self.res_escape_val} %"
+        self._res_escape_label = fr"$\frac{{\Delta E}}{{E}}$(esc.): {self.res_escape_val} % FWHM"
 
     @property
     def time_from_start(self) -> float:
@@ -248,6 +248,11 @@ class Context(ContextBase):
     _sources: dict[str, SourceFile] = field(default_factory=dict, init=False, repr=False)
     _fit: dict = field(default_factory=dict, init=False, repr=False)
 
+    @staticmethod
+    def _normalize_file_key(file_name: str) -> str:
+        """Return the canonical dictionary key for source/fit entries."""
+        return Path(file_name).stem
+
     @property
     def pulse(self) -> PulsatorFile:
         """The PulsatorFile object obtained from the calibration pulse file."""
@@ -282,11 +287,15 @@ class Context(ContextBase):
         """Add a source file to the private `sources` dictionary."""
         if not isinstance(source, SourceFile):
             raise TypeError("Source must be an instance of SourceFile")
-        file_name = source.file_path.stem
+        file_name = self._normalize_file_key(source.file_path.stem)
         self._sources[file_name] = source
+        # Keep source and fit dictionaries aligned even when no fit subtask runs.
+        if file_name not in self._fit:
+            self._fit[file_name] = {}
 
     def source(self, file_name: str) -> SourceFile:
         """Retrieve a source file from the private `sources` dictionary by its file name."""
+        file_name = self._normalize_file_key(file_name)
         if file_name not in self._sources:
             raise KeyError(f"Source file '{file_name}' not found in context.")
         return self._sources[file_name]
@@ -311,7 +320,7 @@ class Context(ContextBase):
             raise TypeError("Target context must be an instance of TargetContext")
         if not isinstance(source, SourceFile):
             raise TypeError("Source must be an instance of SourceFile")
-        file_name = source.file_path.stem
+        file_name = self._normalize_file_key(source.file_path.stem)
         if file_name not in self._fit:
             self._fit[file_name] = {}
         self._fit[file_name][target_ctx.target] = target_ctx
@@ -319,10 +328,12 @@ class Context(ContextBase):
     def target_ctx(self, file_name: str, target: str) -> TargetContext:
         """Retrieve a target context for a specific source file and target from the private `fit`
         dictionary."""
+        file_name = self._normalize_file_key(file_name)
         if file_name not in self._fit:
             raise KeyError(f"File '{file_name}' not found in fit results")
         if target not in self._fit[file_name]:
-            raise KeyError(f"Target subtask '{target}' not found in fit results")
+            raise KeyError(f"Target subtask '{target}' not found in fit results for file" \
+                           f" '{file_name}'")
         return self._fit[file_name][target]
 
     def add_task_results(self, task: str, target: str, results: dict) -> None:

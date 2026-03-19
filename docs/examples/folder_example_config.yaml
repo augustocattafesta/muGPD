@@ -12,8 +12,10 @@ pipeline:
     # Estimate the gain from the main line  
   - task: gain
     target: main
-    fit: true         # Fit the gain with an exponential model
     show: true        # Plot gain vs back voltage
+    subtasks:
+      - target: gain
+        model: Exponential
 
     # Estimate the resolution from the main line 
   - task: resolution

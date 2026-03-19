@@ -9,6 +9,13 @@ from uncertainties import unumpy
 from .context import TargetContext
 from .fileio import SourceFile
 
+XAXIS_LABELS = dict(
+    back="Voltage [V]",
+    drift="Drift Voltage [V]",
+    time="Time [hours]",
+    pressure="Pressure [mbar]"
+)
+
 
 def write_legend(label: str | None, *axs: plt.Axes | None, loc: str = "best" ) -> None:
     # pylint: disable=protected-access
@@ -155,6 +162,8 @@ def plot_task(xdata: np.ndarray, ydata: np.ndarray, *models: AbstractFitModel,
     )
     # Plot all models
     for i, model in enumerate(models):
+        if model is None:
+            continue
         model_label = kwargs.get(f"model{i}_label")
         fit_output = kwargs.get("fit_output", False)
         if isinstance(model, FitModelSum):

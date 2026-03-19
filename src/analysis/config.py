@@ -140,6 +140,7 @@ class SourceConfig(BaseModel):
 class TaskDefaults:
     """Default values for the analysis tasks.
     """
+    xaxis: str = "back"
     fit: bool = True
     show: bool = True
     energy_threshold: float = 1.5 # keV
@@ -157,6 +158,9 @@ class GainConfig(BaseModel):
         Name of the task, to perform it must be 'gain'.
     target: str
         The target name of the fitting subtask to use for the gain calculation.
+    xaxis: str, optional
+        The x-axis to use for the gain plot. The choices are between 'back', 'drift', 'time' and
+        'pressure'. Default is 'back'.
     fit: bool, optional
         Whether to fit the gain values with an exponential function of the voltage. If a single
         source file is analyzed, the fit is not performed. Default is True.
@@ -166,9 +170,9 @@ class GainConfig(BaseModel):
     """
     task: Literal["gain"]
     target: str
-    fit: bool = TaskDefaults.fit
+    xaxis: str = TaskDefaults.xaxis
+    subtasks: list[FitSubtaskConfig] | None = Field(default=None)
     show: bool = TaskDefaults.show
-
 
 class DriftConfig(BaseModel):
     """Perform the analysis of the gain as a function of drift voltage for each source file using
@@ -211,12 +215,16 @@ class ResolutionConfig(BaseModel):
         Name of the task, to perform it must be 'resolution'.
     target: str
         The target name of the fitting subtask to use for the resolution calculation.
+    xaxis: str, optional
+        The x-axis to use for the resolution plot. The choices are between 'back', 'drift' 'time'
+        and 'pressure'. Default is 'back'.
     show: bool, optional
         Whether to generate and show the plot of the resolution values as a function of the back
         voltage. If a single source file is analyzed, the plot is not generated. Default is True.
     """
     task: Literal["resolution"]
     target: str
+    xaxis: str = TaskDefaults.xaxis
     show: bool = TaskDefaults.show
 
 
@@ -272,6 +280,7 @@ class CompareGainConfig(BaseModel):
     """
     task: Literal["compare_gain"]
     target: str
+    xaxis: str = TaskDefaults.xaxis
     combine: list[str] = CompareTaskDefaults.combine
     show: bool = TaskDefaults.show
 
@@ -314,31 +323,6 @@ class CompareTrendConfig(BaseModel):
     """
     task: Literal["compare_trend"]
     target: str
-    show: bool = TaskDefaults.show
-
-
-class TrendGainConfig(BaseModel):
-    """Analyze the gain trend as a function of time. For each source file, the gain is calculated
-    and then plotted as a function of the acquisition time. If a fitting subtask is specified,
-    the gain trend can be fitted with a model or a composite model defined in aptapy.models.
-
-    Attributes
-    ----------
-    task: str
-        Name of the task, to perform it must be 'gain_trend'.
-    target: str
-        The target name of the fitting subtask to use for the gain calculation.
-    subtasks: list[FitSubtask], optional
-        List of fitting subtasks to perform on the gain trend. Each subtask defines the model
-        and the fit parameters to use for the fit. Default is None, which means that the trend is
-        not fitted.
-    show: bool, optional
-        Whether to generate and show the plot of the gain trend as a function of time. Default is
-        True.
-    """
-    task: Literal["gain_trend"]
-    target: str
-    subtasks: list[FitSubtaskConfig] | None = Field(default=None)
     show: bool = TaskDefaults.show
 
 
@@ -485,7 +469,7 @@ class Acquisition(BaseModel):
 
 
 TaskType = CalibrationConfig | FitSpecConfig | GainConfig | ResolutionConfig | \
-    ResolutionEscapeConfig | TrendGainConfig | PlotConfig | DriftConfig | CompareGainConfig | \
+    ResolutionEscapeConfig | PlotConfig | DriftConfig | CompareGainConfig | \
     CompareResolutionConfig | CompareTrendConfig
 
 

@@ -3,6 +3,7 @@
 
 import aptapy.models
 import numpy as np
+from aptapy.modeling import AbstractFitModel
 from aptapy.plotting import last_line_color, plt
 from uncertainties import unumpy
 
@@ -17,10 +18,10 @@ from .config import (
     PlotStyleConfig,
     ResolutionConfig,
     ResolutionEscapeConfig,
-    TrendGainConfig,
 )
 from .context import Context, FoldersContext, TargetContext
 from .plotting import (
+    XAXIS_LABELS,
     get_label,
     get_model_label,
     get_xrange,
@@ -38,6 +39,37 @@ from .utils import (
     gain,
     load_class,
 )
+
+
+def _fit_subtask(xdata: np.ndarray, ydata: np.ndarray,
+                 subtask: FitSubtaskConfig) -> AbstractFitModel:
+    """Fit the data with the model specified in the subtask configuration.
+
+    Parameters
+    ----------
+    xdata : np.ndarray
+        The x data to fit.
+    ydata : np.ndarray
+        The y data to fit.
+    subtask : FitSubtaskConfig
+        The configuration of the fitting subtask.
+
+    Returns
+    -------
+    model : AbstractFitModel
+        The fitted model.
+    """
+    # Load the model and create the instance
+    model_list = load_class(subtask.model)
+    model = model_list[0]()
+    for m in model_list[1:]:
+        model += m()
+    # Load the fit parameters and fit the model to the data
+    fit_pars = subtask.fit_pars.model_dump(exclude={"num_sigma_left", "num_sigma_right"})
+    y_nom = unumpy.nominal_values(ydata)
+    y_err = unumpy.std_devs(ydata)
+    model.fit(xdata, y_nom, sigma=y_err, **fit_pars)
+    return model
 
 
 def calibration(context: Context) -> Context:
@@ -168,13 +200,23 @@ def gain_task(context: Context, task: GainConfig) -> Context:
     """
     name = task.task
     target = task.target
+    xaxis = task.xaxis
     # Get the file names from the fit context keys
     file_names = context.file_names
     # Create empty arrays to store gain values and voltages
     gain_vals = np.zeros(len(file_names), dtype=object)
     voltages = np.zeros(len(file_names))
+    drift_voltages = np.zeros(len(file_names))
+    pressures = np.zeros(len(file_names))
+    start_times = np.zeros(len(file_names), dtype=object)
+    real_times = np.zeros(len(file_names))
     # Iterate over all files and calculate the gain
     for i, file_name in enumerate(file_names):
+        source = context.source(file_name)
+        start_times[i] = source.start_time
+        real_times[i] = source.real_time
+        drift_voltages[i] = source.drift_voltage
+        pressures[i] = source.pressure
         target_ctx = context.target_ctx(file_name, target)
         line_val = target_ctx.line_val
         voltages[i] = target_ctx.voltage
@@ -183,111 +225,49 @@ def gain_task(context: Context, task: GainConfig) -> Context:
                                    context.config.source.energy)
         gain_vals[i] = target_ctx.gain_val
     # Save the results in the context
-    context.add_task_results(name, target, dict(voltages=voltages, gain_vals=gain_vals))
+    times = amptek_accumulate_time(start_times, real_times) / 3600
+    xaxis_data = dict(
+        back=voltages,
+        drift=drift_voltages,
+        pressure=pressures,
+        time=times
+    )
+    context.add_task_results(name, target, dict(voltages=voltages,
+                                                drifts=drift_voltages,
+                                                pressures=pressures,
+                                                times=times,
+                                                gain_vals=gain_vals))
     # If only a single file is analyzed, return the context without plotting or fitting
     if len(file_names) == 1:
         return context
-    model = None
-    if task.fit:
-        model = aptapy.models.Exponential()
-        model.fit(voltages, unumpy.nominal_values(gain_vals),
-                  sigma=unumpy.std_devs(gain_vals), absolute_sigma=True)
-        context.add_task_fit_model(name, target, model)
-    # Define the plot keyword arguments for style and labels
-    style = context.config.style.tasks.get(name, PlotStyleConfig()).model_dump()
-    plot_kwargs = dict(
-        xlabel="Voltage [V]",
-        ylabel="Gain",
-        fig_name=f"gain_{target}",
-        model0_label=get_model_label(name, model) if task.fit else None,
-        show=task.show,
-        **style)
-    # Create the figure for the gain
-    fig = plot_task(voltages, gain_vals, model, **plot_kwargs)
-    # Add the figure to the context
-    context.add_figure(name, fig)
-    return context
-
-
-def gain_trend(context: Context, task: TrendGainConfig) -> Context:
-    """Calculate the gain of the detector vs time using the fit results obtained from the source
-    data.
-    
-    Parameters
-    ---------
-    context : Context
-        The context object containing the fit results.
-    task : TrendGainConfig
-        The gain trend configuration instance.
-
-    Returns
-    -------
-    context : Context
-        The updated context object containing the gain trend and fit results.
-    """
-    name = task.task
-    target = task.target
-    subtasks = task.subtasks
-    # Get the different file names
-    file_names = context.file_names
-    # Create empty arrays to store gain values and start times
-    gain_vals = np.zeros(len(file_names), dtype=object)
-    start_times = np.zeros(len(file_names), dtype=object)
-    real_times = np.zeros(len(file_names))
-    # Iterate over all files and calculate the gain values
-    for i, file_name in enumerate(file_names):
-        # Access the source data to extract the times
-        source = context.source(file_name)
-        start_times[i] = source.start_time
-        real_times[i] = source.real_time
-        # Access the target context and extract line value and voltage
-        target_ctx = context.target_ctx(file_name, target)
-        line_val = target_ctx.line_val
-        target_ctx.gain_val = gain(context.config.source.w,
-                                   line_val,
-                                   context.config.source.energy)
-        gain_vals[i] = target_ctx.gain_val
-    # Calculate the accumulated time in hours
-    times = amptek_accumulate_time(start_times, real_times) / 3600
-    # Save the results in the context
-    context.add_task_results(name, target, dict(times=times, gain_vals=gain_vals))
-    # If fitting subtasks are provided, fit the gain trend with the specified models
     models = []
     model_labels = dict()
-    if subtasks:
-        for i, subtask in enumerate(subtasks):
-            # Think how to refactor this part
-            model_list = load_class(subtask.model)
-            model = model_list[0]()
-            for m in model_list[1:]:
-                model += m()
-            fit_pars = subtask.fit_pars.model_dump()
-            kwargs = dict(
-                xmin=fit_pars["xmin"],
-                xmax=fit_pars["xmax"],
-                absolute_sigma=fit_pars["absolute_sigma"],
-                p0=fit_pars["p0"]
-            )
-            model.fit(times, unumpy.nominal_values(gain_vals),
-                      sigma=unumpy.std_devs(gain_vals),
-                      **kwargs)
-            # model.plot(fit_output=True, plot_components=False)
+    if task.subtasks:
+        for i, subtask in enumerate(task.subtasks):
+            xdata = xaxis_data[xaxis]
+            ydata = gain_vals
+            model = _fit_subtask(xdata, ydata, subtask)
             models.append(model)
             model_labels[f"model{i}_label"] = get_model_label(name, model)
             # Update the context with the fit results
             context.add_subtask_fit_model(name, target, subtask.target, model)
-            # context["results"][task][target][name] = dict(model=model)
     # Define the plot keyword arguments for style and labels
     style = context.config.style.tasks.get(name, PlotStyleConfig()).model_dump()
     plot_kwargs = dict(
-        xlabel="Time from start [hours]",
+        xlabel=XAXIS_LABELS[xaxis],
         ylabel="Gain",
-        fig_name=f"gain_trend_{target}",
+        fig_name=f"gain_{target}",
         show=task.show,
         **model_labels,
         **style)
-    # Create the figure for the gain trend
-    fig = plot_task(times, gain_vals, *models, **plot_kwargs)
+    # Create the figure for the gain
+    xaxis_data = dict(
+        back=voltages,
+        drift=drift_voltages,
+        pressure=pressures,
+        time=times
+    )
+    fig = plot_task(xaxis_data[xaxis], gain_vals, *models, **plot_kwargs)
     # Add the figure to the context
     context.add_figure(name, fig)
     return context
@@ -309,9 +289,17 @@ def compare_gain(context: FoldersContext, task: CompareGainConfig) -> FoldersCon
     context : FoldersContext
         The updated context object containing the gain comparison results.
     """
+    # pylint: disable=too-many-statements
     name = task.task
     target = task.target
     combine = task.combine
+    xaxis = task.xaxis
+    xaxis_data = dict(
+        back="voltages",
+        drift="drift_voltages",
+        pressure="pressures",
+        time="times"
+    )
     folders_style = context.config.style.folders
     # Get the different folder names
     folder_names = context.folder_names
@@ -326,21 +314,27 @@ def compare_gain(context: FoldersContext, task: CompareGainConfig) -> FoldersCon
     for folder_name in folder_names:
         folder_ctx = context.folder_ctx(folder_name)
         folder_gain = folder_ctx.task_results("gain", target)
-        gain_vals = folder_gain.get("gain_vals", [])
-        voltages = folder_gain.get("voltages", [])
+        gain_vals = folder_gain["gain_vals"]
+        xdata = folder_gain[xaxis_data[xaxis]]
         # If not aggregating, plot each folder separately
         if folder_name not in combine:
             style = folders_style.get(folder_name, PlotStyleConfig()).model_dump()
-            model = folder_gain.get("model", None)
+            # Be careful because if the fit was performed with another xaxis quantity there might
+            # be a mismatch between the xdata and the model. We can try to fix this in the future.
+            model = None
+            models = [v['model'] for v in folder_gain.values()
+                      if isinstance(v, dict) and 'model' in v]
+            if models:
+                model = models[0]
             plot_kwargs = dict(
                 model_label=get_model_label(name, model) if model else None,
                 **style)
-            plot_compare_task(ax, voltages, gain_vals, model, **plot_kwargs)
+            plot_compare_task(ax, xdata, gain_vals, model, **plot_kwargs)
         # If aggregating, store the data together for later fitting and plotting
         else:
             y[j] = unumpy.nominal_values(gain_vals)
             yerr[j] = unumpy.std_devs(gain_vals)
-            x[j] = voltages
+            x[j] = xdata
             j += 1
     if combine:
         # Concatenate all data and fit with an exponential model
@@ -365,7 +359,7 @@ def compare_gain(context: FoldersContext, task: CompareGainConfig) -> FoldersCon
     if task_style["title"] is not None:
         plt.title(task_style["title"])
     # Set the labels and the axis scales
-    plt.xlabel("Voltage [V]")
+    plt.xlabel(XAXIS_LABELS[xaxis])
     plt.ylabel("Gain")
     plt.xscale(task_style["xscale"])
     plt.yscale(task_style["yscale"])
@@ -456,35 +450,56 @@ def resolution_task(context: Context, task: ResolutionConfig) -> Context:
     """
     name = task.task
     target = task.target
+    xaxis = task.xaxis
     # Get the file names from the fit context keys
     file_names = context.file_names
     # Create empty arrays to store resolution values and voltages
     res_vals = np.zeros(len(file_names), dtype=object)
     voltages = np.zeros(len(file_names))
+    drift_voltages = np.zeros(len(file_names))
+    pressures = np.zeros(len(file_names))
+    start_times = np.zeros(len(file_names), dtype=object)
+    real_times = np.zeros(len(file_names))
     # Iterate over all files and calculate the gain
     for i, file_name in enumerate(file_names):
         # Access the target context and extract line value, sigma and voltage
+        source = context.source(file_name)
         target_ctx = context.target_ctx(file_name, target)
         line_val = target_ctx.line_val
         sigma = target_ctx.sigma
+        start_times[i] = source.start_time
+        real_times[i] = source.real_time
+        pressures[i] = source.pressure
+        drift_voltages[i] = source.drift_voltage
         voltages[i] = target_ctx.voltage
         target_ctx.res_val = energy_resolution(line_val, sigma)
         res_vals[i] = target_ctx.res_val
     # Save the results in the context
-    context.add_task_results(name, target, dict(voltages=voltages, res_vals=res_vals))
+    times = amptek_accumulate_time(start_times, real_times) / 3600
+    context.add_task_results(name, target, dict(voltages=voltages,
+                                                drifts=drift_voltages,
+                                                pressures=pressures,
+                                                times=times,
+                                                res_vals=res_vals))
     # If only a single file is analyzed, return the context without plotting
     if len(file_names) == 1:
         return context
     # Define the plot keyword arguments for style and labels
     style = context.config.style.tasks.get(name, PlotStyleConfig()).model_dump()
     plot_kwargs = dict(
-        xlabel="Voltage [V]",
+        xlabel=XAXIS_LABELS[xaxis],
         ylabel=r"$\Delta$E/E",
         fig_name=f"resolution_{target}",
         show=task.show,
         **style)
     # Create the figure for the resolution trend
-    fig = plot_task(voltages, res_vals, **plot_kwargs)
+    xaxis_data = dict(
+        back=voltages,
+        drift=drift_voltages,
+        pressure=pressures,
+        time=times,
+    )
+    fig = plot_task(xaxis_data[xaxis], res_vals, **plot_kwargs)
     # Add the figure to the context
     context.add_figure(name, fig)
     return context
@@ -579,8 +594,6 @@ def compare_resolution(context: FoldersContext, task: CompareResolutionConfig) -
         folder_ctx = context.folder_ctx(folder_name)
         folder_res = folder_ctx.task_results("resolution", target)
         res_vals = folder_res.get("res_vals", [])
-        # res_val = unumpy.nominal_values(folder_res.get("res_vals", []))
-        # res_err = unumpy.std_devs(folder_res.get("res_vals", []))
         voltages = folder_res.get("voltages", [])
         # If not aggregating, plot each folder separately
         if folder_name not in combine:
