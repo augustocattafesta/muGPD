@@ -496,8 +496,6 @@ class AppConfig(BaseModel):
         Source acquisition parameters. Default values are defined in SourceConfig.
     style : StyleConfig, optional
         Style configuration for the plots. Default values are defined in StyleConfig.
-    acquisition : Acquisition, optional
-        Acquisition information to show in the plots. Default values are defined in Acquisition.
     """
     pipeline: list[TaskType]
     source: SourceConfig = Field(default_factory=SourceConfig)
