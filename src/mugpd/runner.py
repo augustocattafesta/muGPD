@@ -183,18 +183,16 @@ def run(config_file_path: str | Path,
     file_paths, path_type = check_source_paths(paths)
     input_paths = [str(Path(p)) for p in paths]
     config_path = str(Path(config_file_path).absolute())
+    context: Context | FoldersContext
     if path_type == "file":
         log.info("Running analysis on single files")
         context = _run_single(config, *file_paths)
-        context.set_run_meta(config_path=config_path,
-                             input_paths=input_paths,
-                             path_type=path_type)
-        return context
-    if path_type == "folder":
+    elif path_type == "folder":
         log.info("Running analysis on folder(s)")
         context = _run_folders(config, *file_paths)
-        context.set_run_meta(config_path=config_path,
-                             input_paths=input_paths,
-                             path_type=path_type)
-        return context
-    raise ValueError("Invalid path type. Paths must be either all files or all folders.")
+    else:
+        raise ValueError("Invalid path type. Paths must be either all files or all folders.")
+    context.set_run_meta(config_path=config_path,
+                            input_paths=input_paths,
+                            path_type=path_type)
+    return context

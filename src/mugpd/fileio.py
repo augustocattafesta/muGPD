@@ -124,7 +124,7 @@ class SourceFile(FileBase):
         return "Unknown"
 
     @property
-    def date(self) -> datetime.datetime.date:
+    def date(self) -> datetime.date | str:
         """Date of the acquisition extracted from the file name.
         """
         match = match = re.search(r"_(\d{6}|\d{8})_", f"_{self.file_path.name}_")
