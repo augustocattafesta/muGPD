@@ -18,8 +18,8 @@ import pathlib
 import matplotlib.pyplot as plt
 import pytest
 
-from analysis.config import AppConfig
-from analysis.context import Context
+from mugpd.config import AppConfig
+from mugpd.context import Context
 
 
 def pytest_addoption(parser):

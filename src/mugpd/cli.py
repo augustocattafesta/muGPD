@@ -2,8 +2,8 @@ import argparse
 
 from aptapy.plotting import plt
 
-from analysis import ANALYSIS_RESULTS
-from analysis.runner import run
+from mugpd import ANALYSIS_RESULTS
+from mugpd.runner import run
 
 __description__ = """
 Analysis CLI tool for processing and visualizing data collected with μGPDs. The workflow starts
@@ -16,9 +16,9 @@ https://augustocattafesta.github.io/master_thesis/
 """
 
 def main():
-    """Main function for the analysis CLI."""
+    """Main function for the muGPD analysis CLI."""
     parser = argparse.ArgumentParser(
-        prog="analysis",
+        prog="mugpd",
         description=__description__,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
         )

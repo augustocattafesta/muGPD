@@ -1,7 +1,7 @@
 from aptapy.plotting import plt
 
-from analysis.runner import run, run_folders
-from analysis import ANALYSIS_DOCS
+from mugpd.runner import run
+from mugpd import ANALYSIS_DOCS
 
 DOCS_PATH = ANALYSIS_DOCS
 FIGURES_PATH = DOCS_PATH / "figures"
@@ -31,7 +31,7 @@ gain_trend_fig.savefig(FIGURES_PATH / "gain_trend.png")
 
 folder1_path = EXAMPLES_PATH / "data/folder1"
 compare_config_path = EXAMPLES_PATH / "folder_comparison_example_config.yaml"
-context = run_folders(compare_config_path, folder_path, folder1_path)
+context = run(compare_config_path, folder_path, folder1_path)
 compare_gain_fig = context._figures["compare_gain"]
 compare_gain_fig.savefig(FIGURES_PATH / "compare_gain.png")
 compare_resolution_fig = context._figures["compare_resolution"]

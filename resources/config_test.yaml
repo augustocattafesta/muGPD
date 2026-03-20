@@ -1,0 +1,75 @@
+acquisition:
+  date: "2026-01-1"
+  chip: chip
+  structure: structure
+  gas: Ar
+  w: 26.
+  element: 55Fe
+  e_peak: 5.9
+
+
+pipeline:
+  # Calibrate the ADC counts with the calibration file
+  - task: calibration
+    show: false
+
+  - task: fit_spec
+    subtasks:
+    - target: main
+      model: Fe55Forest
+      fit_pars:
+        xmin: 1.
+        num_sigma_left: 2.5
+        num_sigma_right: 2.
+        
+    
+    # - target: esc
+    #   model: Gaussian
+    #   fit_pars:
+    #     xmin: 0.7
+    #     xmax: 1.1
+    #     num_sigma_left: 0.5
+    #     num_sigma_right: 1.5
+    #     # p0: [0.89, 1, 0.2]
+  
+
+  - task: gain
+    target: main
+    show: false
+
+
+  - task: resolution
+    target: main
+    show: false
+  
+  # - task: resolution
+  #   target: esc
+  
+  # - task: resolution_escape
+  #   target_main: main
+  #   target_escape: esc
+  #   show: false
+
+  - task: plot
+    targets:
+      - main
+      # - esc
+    task_labels:
+      - resolution
+      - resolution_escape
+      - gain
+    xmin_factor: 0.5
+
+
+style:
+  tasks:
+    plot:
+      xscale: linear
+      yscale: linear
+      title: $^{55}$Fe spectrum of 2D $\mu$gap
+      label: Data
+      legend_label: Chip W1b
+      legend_loc: upper right
+      xrange: 
+
+

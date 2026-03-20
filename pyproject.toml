@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "analysis"
+name = "muGPD"
 dynamic = ["version"]
 description = "Package to analyze data for my master thesis"
 readme = "README.md"
@@ -46,10 +46,10 @@ Homepage = ""
 Issues = ""
 
 [project.scripts]
-analysis = "analysis.cli:main"
+mugpd = "mugpd.cli:main"
 
 [tool.hatch.version]
-path = "src/analysis/_version.py"
+path = "src/mugpd/_version.py"
 
 # ruff configuration, see
 # https://docs.astral.sh/ruff/configuration/
