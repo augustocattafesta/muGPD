@@ -4,8 +4,10 @@
 import datetime
 import inspect
 import re
+from dataclasses import dataclass
 from collections.abc import Iterable
 from pathlib import Path
+from typing import Any
 
 import aptapy.modeling
 import numpy as np
@@ -103,6 +105,38 @@ class SourceFile(FileBase):
         if match is not None:
             return float(match.group(1))
         return 0.0
+
+    @property
+    def structure(self) -> str:
+        """Structure type of the detector extracted from the file name.
+        """
+        match = re.search(r"_(\d+p\d+[a-zA-Z]*|\d+[Dd])_", self.file_path.name)
+        if match is not None:
+            value = match.group(1).upper()
+            return value.replace("P", ".")
+        return "Unknown"
+
+    @property
+    def wafer(self) -> str:
+        """Wafer type of the detector extracted from the file name.
+        """
+        match = re.search(r"_([Ww]\d+[a-zA-Z]?)_", self.file_path.name)
+        if match is not None:
+            return match.group(1).upper()
+        return "Unknown"
+
+    @property
+    def date(self) -> datetime.datetime.date:
+        """Date of the acquisition extracted from the file name.
+        """
+        match = match = re.search(r"_(\d{6}|\d{8})_", f"_{self.file_path.name}_")
+        if match is not None:
+            date_str = match.group(1)
+            if len(date_str) == 6:
+                return datetime.datetime.strptime(date_str, "%d%m%y").date()
+            if len(date_str) == 8:
+                return datetime.datetime.strptime(date_str, "%d%m%Y").date()
+        return "Unknown"
 
 
 class PulsatorFile(FileBase):
@@ -232,3 +266,200 @@ def check_source_paths(paths: Iterable[str | Path]) -> tuple[list[Path], str]:
     if all(is_folder):
         return checked_paths, "folder"
     raise ValueError("All source paths must be either files or folders.")
+
+
+@dataclass(frozen=True)
+class AnalysisRecord:
+    """Index entry describing a saved analysis run."""
+    run_id: str
+    mode: str
+    manifest_path: Path
+    run_directory: Path
+    created_at: str | None
+    acquisition_dates: list[str]
+    wafers: list[str]
+    structures: list[str]
+
+
+class AnalysisRun:
+    """Reader for a single analysis run manifest file."""
+
+    def __init__(self, manifest_path: str | Path):
+        self.manifest_path = Path(manifest_path)
+        if not self.manifest_path.exists():
+            raise FileNotFoundError(f"Manifest file {self.manifest_path} does not exist.")
+        if self.manifest_path.name != "analysis_run.yaml":
+            raise ValueError("Manifest file must be named 'analysis_run.yaml'.")
+        with open(self.manifest_path, encoding="utf-8") as f:
+            self._data = yaml.safe_load(f) or {}
+
+    @property
+    def data(self) -> dict[str, Any]:
+        """Raw manifest dictionary."""
+        return self._data
+
+    @property
+    def run(self) -> dict[str, Any]:
+        """Run metadata block."""
+        return self._data.get("run", {})
+
+    @property
+    def mode(self) -> str:
+        """Run mode: single or folders."""
+        return str(self.run.get("mode", "unknown"))
+
+    @property
+    def run_id(self) -> str:
+        """Run identifier string."""
+        return str(self.run.get("run_id", self.manifest_path.parent.name))
+
+    @property
+    def created_at(self) -> str | None:
+        """Run creation timestamp in ISO format if available."""
+        value = self.run.get("created_at")
+        return str(value) if value is not None else None
+
+    def _single_sources(self) -> dict[str, Any]:
+        """Source dictionary for single-mode runs."""
+        return self._data.get("sources", {})
+
+    def _folders_sources(self) -> dict[str, Any]:
+        """Flatten source dictionaries for folders-mode runs."""
+        out: dict[str, Any] = {}
+        folders = self._data.get("folders", {})
+        for folder_name, folder_payload in folders.items():
+            sources = folder_payload.get("sources", {})
+            for source_name, source_payload in sources.items():
+                key = f"{folder_name}/{source_name}"
+                out[key] = source_payload
+        return out
+
+    def sources(self) -> dict[str, Any]:
+        """Flattened source metadata across run modes."""
+        if self.mode == "folders":
+            return self._folders_sources()
+        return self._single_sources()
+
+    @staticmethod
+    def _normalized_unique(values: Iterable[Any]) -> list[str]:
+        """Normalize iterables into sorted unique string values."""
+        clean = {
+            str(v).strip() for v in values
+            if v not in (None, "", "Unknown")
+        }
+        return sorted(clean)
+
+    def acquisition_dates(self) -> list[str]:
+        """Acquisition dates extracted from source metadata."""
+        dates = [src.get("date") for src in self.sources().values()]
+        return self._normalized_unique(dates)
+
+    def wafers(self) -> list[str]:
+        """Wafer values extracted from source metadata."""
+        wafers = [src.get("wafer") for src in self.sources().values()]
+        return self._normalized_unique(wafers)
+
+    def structures(self) -> list[str]:
+        """Structure values extracted from source metadata."""
+        structures = [src.get("structure") for src in self.sources().values()]
+        return self._normalized_unique(structures)
+
+    def to_record(self) -> AnalysisRecord:
+        """Build an index record for this run."""
+        return AnalysisRecord(
+            run_id=self.run_id,
+            mode=self.mode,
+            manifest_path=self.manifest_path,
+            run_directory=self.manifest_path.parent,
+            created_at=self.created_at,
+            acquisition_dates=self.acquisition_dates(),
+            wafers=self.wafers(),
+            structures=self.structures(),
+        )
+
+
+class AnalysisIndex:
+    """Scan and query saved analysis manifests for GUI retrieval."""
+
+    def __init__(self, root_dir: str | Path):
+        self.root_dir = Path(root_dir)
+        if not self.root_dir.exists():
+            raise FileNotFoundError(f"Results directory {self.root_dir} does not exist.")
+        self._records: list[AnalysisRecord] = []
+
+    @property
+    def records(self) -> list[AnalysisRecord]:
+        """Current in-memory index records."""
+        return self._records
+
+    def build(self) -> list[AnalysisRecord]:
+        """Build index by scanning analysis_run.yaml files recursively."""
+        manifest_paths = sorted(self.root_dir.rglob("analysis_run.yaml"))
+        records: list[AnalysisRecord] = []
+        for manifest_path in manifest_paths:
+            try:
+                record = AnalysisRun(manifest_path).to_record()
+                records.append(record)
+            except (FileNotFoundError, ValueError, TypeError):
+                # Ignore malformed entries and keep the index usable.
+                continue
+        self._records = records
+        return records
+
+    @staticmethod
+    def _match_any(record_values: list[str], selected_values: set[str] | None) -> bool:
+        """Return True if any value in record matches current filter."""
+        if selected_values is None:
+            return True
+        if not selected_values:
+            return True
+        return any(v in selected_values for v in record_values)
+
+    def filter(
+        self,
+        acquisition_dates: Iterable[str] | None = None,
+        wafers: Iterable[str] | None = None,
+        structures: Iterable[str] | None = None,
+    ) -> list[AnalysisRecord]:
+        """Filter records by acquisition date, wafer, and structure."""
+        dates_set = set(acquisition_dates) if acquisition_dates is not None else None
+        wafers_set = set(wafers) if wafers is not None else None
+        structures_set = set(structures) if structures is not None else None
+        out: list[AnalysisRecord] = []
+        for record in self._records:
+            if not self._match_any(record.acquisition_dates, dates_set):
+                continue
+            if not self._match_any(record.wafers, wafers_set):
+                continue
+            if not self._match_any(record.structures, structures_set):
+                continue
+            out.append(record)
+        return out
+
+    def available_values(self) -> dict[str, list[str]]:
+        """Return all available unique values for each filter key."""
+        dates = sorted({v for r in self._records for v in r.acquisition_dates})
+        wafers = sorted({v for r in self._records for v in r.wafers})
+        structures = sorted({v for r in self._records for v in r.structures})
+        return {
+            "acquisition_dates": dates,
+            "wafers": wafers,
+            "structures": structures,
+        }
+
+    @staticmethod
+    def records_to_rows(records: Iterable[AnalysisRecord]) -> list[dict[str, Any]]:
+        """Convert records into table-friendly dictionaries for UI."""
+        rows: list[dict[str, Any]] = []
+        for r in records:
+            rows.append({
+                "run_id": r.run_id,
+                "mode": r.mode,
+                "created_at": r.created_at,
+                "acquisition_dates": ", ".join(r.acquisition_dates),
+                "wafers": ", ".join(r.wafers),
+                "structures": ", ".join(r.structures),
+                "manifest_path": str(r.manifest_path),
+                "run_directory": str(r.run_directory),
+            })
+        return rows
