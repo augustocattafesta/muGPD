@@ -7,7 +7,7 @@ import time
 from loguru import logger
 
 
-class AnalysisLogger:
+class MuGPDLogger:
     """Logger class for the analysis pipeline.
     """
     def __init__(self, level="INFO") -> None:
@@ -52,4 +52,4 @@ class AnalysisLogger:
         """
         return logger
 
-log = AnalysisLogger().log
+log = MuGPDLogger().log
