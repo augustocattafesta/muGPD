@@ -127,7 +127,8 @@ class BrowserApp:
         return x_key, x_val, y_key, y_val
 
     @staticmethod
-    def _build_xy_dataframe(x_key: str | None, x_val: Any, y_key: str | None, y_val: Any) -> pd.DataFrame:
+    def _build_xy_dataframe(x_key: str | None, x_val: Any, y_key: str | None,
+                            y_val: Any) -> pd.DataFrame:
         x_label = x_key or "x"
         y_label = y_key or "y"
         x_list = x_val if isinstance(x_val, list) else []
@@ -157,7 +158,8 @@ class BrowserApp:
         rows.append({"field": prefix, "value": BrowserApp._format_scalar(value)})
 
     @staticmethod
-    def _get_source_metadata(run_data: dict[str, Any], source_key: str, folder_name: str | None = None) -> dict[str, Any]:
+    def _get_source_metadata(run_data: dict[str, Any], source_key: str,
+                             folder_name: str | None = None) -> dict[str, Any]:
         mode = run_data.get("run", {}).get("mode", "single")
         if mode == "folders" and folder_name:
             folder_payload = run_data.get("folders", {}).get(folder_name, {})
@@ -286,7 +288,8 @@ class BrowserApp:
         ]
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
-    def _render_spectrum_metadata_table(self, run_data: dict[str, Any], source_key: str, folder_name: str | None = None) -> None:
+    def _render_spectrum_metadata_table(self, run_data: dict[str, Any], source_key: str,
+                                        folder_name: str | None = None) -> None:
         src_meta = self._get_source_metadata(run_data, source_key, folder_name)
         rows = []
         for key in ["date", "wafer", "structure", "voltage", "drift_voltage", "pressure"]:
@@ -364,7 +367,8 @@ class BrowserApp:
                     [entry["label"] for entry in available_entries],
                     key=self._safe_key("spectrum-select", run.run_id),
                 )
-                entries = [entry for entry in available_entries if entry["label"] == selected_label][:1]
+                entries = [entry for entry in available_entries
+                           if entry["label"] == selected_label][:1]
             else:
                 entries = available_entries
 
@@ -406,10 +410,12 @@ class BrowserApp:
             selected_label = st.selectbox("Figure", options=option_labels, index=0, key=select_key)
             fig_path, fig_name = figure_candidates[option_labels.index(selected_label)]
 
-        col_left, col_right = st.columns([1, 1]) if fig_path is not None else (st.container(), None)
+        col_left, col_right = st.columns([1, 1]) if fig_path is not None else (st.container(),
+                                                                               None)
         with col_left:
             x_key, x_val, y_key, y_val = self._extract_xy_from_config(payload, task_name, run_data)
-            if (x_val is not None and isinstance(x_val, list)) or (y_val is not None and isinstance(y_val, list)):
+            if (x_val is not None and isinstance(x_val, list)) or (y_val is not None and
+                                                                   isinstance(y_val, list)):
                 xy_df = self._build_xy_dataframe(x_key, x_val, y_key, y_val)
                 if not xy_df.empty:
                     st.dataframe(xy_df, use_container_width=True, hide_index=True)
@@ -505,7 +511,8 @@ class BrowserApp:
                         )
                         st.divider()
 
-    def _render_sidebar(self, available: dict[str, list[str]]) -> tuple[list[str], list[str], list[str]]:
+    def _render_sidebar(self, available: dict[str, list[str]]
+                        ) -> tuple[list[str], list[str], list[str]]:
         selected_dates = st.sidebar.multiselect(
             "Acquisition date",
             options=available["acquisition_dates"],

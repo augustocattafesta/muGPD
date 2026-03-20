@@ -115,7 +115,7 @@ class SourceFile(FileBase):
             value = match.group(1).upper()
             return value.replace("P", ".")
         return "Unknown"
-    
+
     @property
     def wafer(self) -> str:
         """Wafer type of the detector extracted from the file name.
@@ -124,7 +124,7 @@ class SourceFile(FileBase):
         if match is not None:
             return match.group(1).upper()
         return "Unknown"
-    
+
     @property
     def date(self) -> datetime.datetime.date:
         """Date of the acquisition extracted from the file name.
@@ -134,9 +134,9 @@ class SourceFile(FileBase):
             date_str = match.group(1)
             if len(date_str) == 6:
                 return datetime.datetime.strptime(date_str, "%d%m%y").date()
-            else:
+            if len(date_str) == 8:
                 return datetime.datetime.strptime(date_str, "%d%m%Y").date()
-        raise "Unknown"
+        return "Unknown"
 
 
 class PulsatorFile(FileBase):
