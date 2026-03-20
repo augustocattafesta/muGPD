@@ -453,7 +453,6 @@ class Context(ContextBase):
                 "resolved_sources": self.paths,
                 "path_type": self._run_meta.get("path_type"),
             },
-            "acquisition": self.config.acquisition.model_dump(),
             "calibration": self._serialize_calibration(),
             "sources": self._serialize_sources(),
             "fit": self._serialize_fit(),
@@ -644,7 +643,6 @@ class FoldersContext(ContextBase):
                 "resolved_folders": self.paths,
                 "path_type": self._run_meta.get("path_type"),
             },
-            "acquisition": self.config.acquisition.model_dump(),
             "folders": folders_payload,
             "folder_tasks": self._results,
             "artifacts": {

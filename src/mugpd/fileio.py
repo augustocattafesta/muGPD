@@ -4,8 +4,8 @@
 import datetime
 import inspect
 import re
-from dataclasses import dataclass
 from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 

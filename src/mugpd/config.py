@@ -479,16 +479,6 @@ class StyleConfig(BaseModel):
     folders: dict[str, PlotStyleConfig] = Field(default_factory=dict)
 
 
-class Acquisition(BaseModel):
-    date: str | None = None
-    chip: str | None = None
-    structure: str | None = None
-    gas: str | None = None
-    w: float = 26.0
-    element: str | None = None
-    e_peak: float = KALPHA
-
-
 TaskType = CalibrationConfig | FitSpecConfig | GainConfig | ResolutionConfig | \
     ResolutionEscapeConfig | PlotConfig | DriftConfig | CompareGainConfig | \
     CompareResolutionConfig | CompareTrendConfig
@@ -512,7 +502,6 @@ class AppConfig(BaseModel):
     pipeline: list[TaskType]
     source: SourceConfig = Field(default_factory=SourceConfig)
     style: StyleConfig = Field(default_factory=StyleConfig)
-    acquisition: Acquisition = Field(default_factory=Acquisition)
 
     @classmethod
     def from_yaml(cls, path: str | pathlib.Path) -> "AppConfig":
