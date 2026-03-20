@@ -181,10 +181,20 @@ def run(config_file_path: str | Path,
     log.info(f"Configuration file loaded:\n{config}")
     # Check if the given paths are files or folders and run the appropriate analysis pipeline
     file_paths, path_type = check_source_paths(paths)
+    input_paths = [str(Path(p)) for p in paths]
+    config_path = str(Path(config_file_path).absolute())
     if path_type == "file":
         log.info("Running analysis on single files")
-        return _run_single(config, *file_paths)
+        context = _run_single(config, *file_paths)
+        context.set_run_meta(config_path=config_path,
+                             input_paths=input_paths,
+                             path_type=path_type)
+        return context
     if path_type == "folder":
         log.info("Running analysis on folder(s)")
-        return _run_folders(config, *file_paths)
+        context = _run_folders(config, *file_paths)
+        context.set_run_meta(config_path=config_path,
+                             input_paths=input_paths,
+                             path_type=path_type)
+        return context
     raise ValueError("Invalid path type. Paths must be either all files or all folders.")
