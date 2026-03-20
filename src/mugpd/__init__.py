@@ -28,7 +28,7 @@ def _git_suffix() -> str:
 
 
 __version__ = f"{__base_version__}{_git_suffix()}"
-__package_name__ = 'analysis'
+__package_name__ = 'mugpd'
 
 ANALYSIS_BASE = pathlib.Path(__file__).parent
 ANALYSIS_ROOT = ANALYSIS_BASE.parent.parent

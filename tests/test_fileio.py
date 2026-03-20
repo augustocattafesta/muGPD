@@ -5,7 +5,7 @@ import datetime
 
 import numpy as np
 
-from analysis.fileio import PulsatorFile, SourceFile
+from mugpd.fileio import PulsatorFile, SourceFile
 
 
 def test_pulse(datadir):
