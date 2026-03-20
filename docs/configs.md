@@ -3,27 +3,26 @@
 In this documentation there is a full explanation of all the tasks that can be executed through the pipeline in the YAML configuration file and their parameters.
 
 
-::: src.analysis.config.SourceConfig
+::: src.mugpd.config.SourceConfig
 
-::: src.analysis.config.CalibrationConfig
+::: src.mugpd.config.CalibrationConfig
 
-::: src.analysis.config.FitSpecConfig
+::: src.mugpd.config.FitSpecConfig
 
-::: src.analysis.config.FitSubtaskConfig
+::: src.mugpd.config.FitSubtaskConfig
 
-::: src.analysis.config.GainConfig
+::: src.mugpd.config.GainConfig
 
-::: src.analysis.config.CompareGainConfig
+::: src.mugpd.config.CompareGainConfig
 
-::: src.analysis.config.ResolutionConfig
+::: src.mugpd.config.ResolutionConfig
 
-::: src.analysis.config.ResolutionEscapeConfig
+::: src.mugpd.config.ResolutionEscapeConfig
 
-::: src.analysis.config.CompareResolutionConfig
+::: src.mugpd.config.CompareResolutionConfig
 
-::: src.analysis.config.CompareTrendConfig
+::: src.mugpd.config.CompareTrendConfig
 
-::: src.analysis.config.DriftConfig
+::: src.mugpd.config.DriftConfig
 
-::: src.analysis.config.PlotConfig
-
+::: src.mugpd.config.PlotConfig

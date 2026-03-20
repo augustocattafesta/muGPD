@@ -4,7 +4,7 @@
 
 After the installation, the CLI can be used with the command:
 ```bash
-analysis config paths
+mugpd config paths
 ```
 
 To run the analysis, the requested arguments are the .yaml configuration file path and the data files or folders paths. The .yaml configuration file path is always the first argument.
@@ -12,13 +12,13 @@ To run the analysis, the requested arguments are the .yaml configuration file pa
 To analyze one or more source files, the command needs a sequence of source file paths and a calibration with pulsed data as the last argument. This is an example of the analysis of two source files using the same calibration file:
 
 ```bash
-analysis path_config path_file0 path_file1 path_calibration
+mugpd path_config path_file0 path_file1 path_calibration
 ```
 
 To analyze one or more folders, the order of the arguments is the same as the previous case, with the exception that no calibration file has to be specified, as it is supposed that each folder contains its own calibration file:
 
 ```bash
-analysis path_config path_folder0 path_folder1
+mugpd path_config path_folder0 path_folder1
 ```
 
 The default directory to search for data files or folders is the data directory in the package root. If a file or a folder is inside this directory, there is no need to specify all the path of the folder, but the relative path from the data directory is enough to locate it.
@@ -26,7 +26,7 @@ The default directory to search for data files or folders is the data directory 
 It is also possible to save the analysis results (e.g. plots and numerical values) inside the results directory, which is automatically created in the user's home. This option can be enabled using the optional argument `-s` (or `--save`) in the CLI command. It is also possible to choose the format to use to save the plots (pdf or png). An example of command to save the results is:
 
 ```bash
-analysis path_config path_folder0 -s -f png
+mugpd path_config path_folder0 -s -f png
 ```
 
 ### File naming
