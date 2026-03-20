@@ -1,13 +1,12 @@
 import argparse
 import ast
 import datetime
+import enum
 import pathlib
 import subprocess
-from enum import Enum
-
-from packaging.version import Version, parse
 
 from aptapy import __name__ as __package_name__
+from packaging.version import Version, parse
 
 # Basic environment.
 _ROOT_DIR = pathlib.Path(__file__).parent.parent
@@ -18,7 +17,7 @@ _RELEASE_NOTES_PATH = _DOCS_DIR / "release_notes.rst"
 _ENCODING = "utf-8"
 
 
-class BumpMode(str, Enum):
+class BumpMode(enum.StrEnum):
 
     """Small enum class describing the bump mode.
     """
