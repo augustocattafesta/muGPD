@@ -5,7 +5,7 @@ import enum
 import pathlib
 import subprocess
 
-from aptapy import __name__ as __package_name__
+from mugpd import __name__ as __package_name__
 from packaging.version import Version, parse
 
 # Basic environment.
@@ -13,7 +13,7 @@ _ROOT_DIR = pathlib.Path(__file__).parent.parent
 _DOCS_DIR = _ROOT_DIR / "docs"
 _SRC_DIR = _ROOT_DIR / "src" / __package_name__
 _VERSION_FILE_PATH = _SRC_DIR / "_version.py"
-_RELEASE_NOTES_PATH = _DOCS_DIR / "release_notes.rst"
+_RELEASE_NOTES_PATH = _DOCS_DIR / "release_notes.md"
 _ENCODING = "utf-8"
 
 
