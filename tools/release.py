@@ -5,8 +5,9 @@ import enum
 import pathlib
 import subprocess
 
-from mugpd import __name__ as __package_name__
 from packaging.version import Version, parse
+
+from mugpd import __name__ as __package_name__
 
 # Basic environment.
 _ROOT_DIR = pathlib.Path(__file__).parent.parent
