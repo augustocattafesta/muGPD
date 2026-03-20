@@ -13,7 +13,7 @@ In this example, a basic analysis of a single source file is performed. See the 
 After writing the configuration file, the analysis can be launched from the command line interface with:
 
 ```bash
-analysis path_config path_source path_calibration
+mugpd path_config path_source path_calibration
 ```
 
 After the analysis is completed, the result is the following plot, showing the main emission line and the escape peak, along with the fit models and the legend showing the gain and energy resolution results:
@@ -30,7 +30,7 @@ In this example, the analysis of a folder is performed. You can see from the con
 
 The command to run is:
 ```bash
-analysis path_config path_folder
+mugpd path_config path_folder
 ```
 
 Setting the `show` key to `true` for the `gain` and `resolution` tasks, the output plots are the following:
@@ -63,7 +63,7 @@ In this example, two folders are analyzed to compare the gain and the energy res
 To run this analysis the command is:
 
 ```bash
-analysis path_config path_folder0 path_folder1
+mugpd path_config path_folder0 path_folder1
 ```
 
 The output is the following:
