@@ -192,7 +192,7 @@ def run(config_file_path: str | Path,
         context = _run_folders(config, *file_paths)
     else:
         raise ValueError("Invalid path type. Paths must be either all files or all folders.")
-    context.set_run_meta(config_path=config_path,
-                            input_paths=input_paths,
-                            path_type=path_type)
+    context.set_run_metadata(config_path=config_path,
+                             input_paths=input_paths,
+                             path_type=path_type)
     return context

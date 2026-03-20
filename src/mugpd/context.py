@@ -246,7 +246,7 @@ class ContextBase:
         """Add a figure to the private `figures` dictionary."""
         self._figures[figure_name] = figure
 
-    def set_run_meta(self, **kwargs: Any) -> None:
+    def set_run_metadata(self, **kwargs: Any) -> None:
         """Attach run-time metadata used by the output manifest."""
         self._run_meta.update(kwargs)
 
