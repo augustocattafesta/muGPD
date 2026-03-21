@@ -585,7 +585,7 @@ def compare_resolution(context: FoldersContext, task: CompareResolutionConfig) -
     context : FoldersContext
         The updated context object containing the resolution comparison results.
     """
-    name = "compare_resolution"
+    name = task.task
     target = task.target
     combine = task.combine
     folders_style = context.config.style.folders

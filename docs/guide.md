@@ -1,13 +1,13 @@
 # **Analysis and configuration guide**
 
-## Run the analysis
+## Running μGPD analysis tool
 
-After the installation, the CLI can be used with the command:
+After the installation, the analysis tool can be launched from terminal with the command:
 ```bash
 mugpd config paths
 ```
 
-To run the analysis, the requested arguments are the .yaml configuration file path and the data files or folders paths. The .yaml configuration file path is always the first argument.
+The first positional argument is the .yaml configuration file path. The second argument accepts multiple paths to the data files or folders to analyze.
 
 To analyze one or more source files, the command needs a sequence of source file paths and a calibration with pulsed data as the last argument. This is an example of the analysis of two source files using the same calibration file:
 
@@ -65,26 +65,6 @@ To run the analysis, a configuration file must always be specified. This section
 The configuration file is a .yaml file which contains all the information to run the analysis and also for the plot style. This file allows to write an analysis pipeline in which each task can be configured.
 
 **Warning:**  when a key is optional and you want to set it to the default value, all the line must be deleted, not only the value, otherwise a type error can be raised or a `None` value can be assigned to the key.
-
-<!-- ### Acquisition
-
-The acquisition dictionary stores information about the acquisition, such as the date of the acquisition, the name and type of the chip and other detector and source properties. These properties are stored as keys of the dictionary, and a value is assigned to each of them. 
-
-The acquisition dictionary is optional and none of its field is mandatory
-
-**Note:** currently these info are not being used for any purpose, but in the future they can be useful for some tasks.
-
-```yaml
-acquisition:
-  date: 2026-01-01
-  chip: W1a
-  structure: 86.6 um
-  gas: Ar
-  w: 26.
-  element: Fe55
-  e_peak: 5.9
-```
- -->
 
 ### Source
 
@@ -148,32 +128,19 @@ A subtask also has another optional key, which is `fit_pars`, that allows to spe
 
 This task performs the estimate of the gain using the spectral fitting results of a given `target`, previously specified during the *fit_spec* task.
 
-If the analysis is performed on a single file, there are no other keys to specify. If the analysis is performed on multiple files or on one or multiple folders, the `fit` and `plot` can be specified. 
+If the analysis is performed on a single file, there are no other keys to specify. If it is performed on multiple files it is possible to fit the data writing a fitting subtask.
 
-**Note:** no error is raised if these optional keys are specified during the analysis of a single file, but no fit will be performed and no plot will be shown.
 
 ```yaml
   - task: gain
     target: main_peak
-    fit: true            # Optional, fit the data with an exponential model
-    show: true           # Optional, plot gain vs back voltage
+    xaxis: back             # Optional, the quantity to put on xaxis
+    subtasks:               # Optional, fitting substask with Exponential model
+      - target: fit_gain    # Name of the fitting subtask
+        model: Exponential
+    show: true              # Optional, plot gain vs xaxis
 ```
 
-#### Gain trend with time
-
-This task performs the study of the gain as a function of time. The gain is estimated in the same way as the *gain* task. For each source file, the time and the length of the acquisition are extracted from the header. The time info are combined together to get the variation of the gain with time.
-
-The gain trend can also be analyzed using fitting subtasks, which allow to fit the data with a model or a composition of models from *aptapy.models*. These subtasks share the same syntax of the spectral fitting subtasks.
-
-If more than one trend is visible in the same data, multiple targets can be specified, and the fit range can be adjusted to each trend.
-
-```yaml
-  - task: gain_trend
-    target: main_peak
-    subtasks:                         # Optional, fitting subtasks
-      target: trend                   
-      model: Exponential + Constant   # Composition of models 
-```
 
 #### Gain compare between folders
 
@@ -186,6 +153,7 @@ If there are multiple data taken at a given voltage, the mean of the gain estima
 ```yaml
   - task: compare_gain
     target: main_peak
+    xaxis: back                  # Optional, quantity to put on xaxis
     combine:                     # Optional, combine the data of the specified folders
       - folder0
       - folder1
