@@ -1,4 +1,5 @@
 import datetime
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -8,6 +9,7 @@ import yaml
 from aptapy import modeling, models, plotting
 from uncertainties import UFloat
 
+from ._logger import log
 from .config import AppConfig
 from .fileio import PulsatorFile, SourceFile
 
@@ -40,7 +42,7 @@ class TargetContext:
     _gain_val: UFloat | None = field(default=None, init=False, repr=False)
     _gain_label: str = field(default="", init=False, repr=False)
 
-    _fhwm_val: UFloat | None = field(default=None, init=False, repr=False)
+    _fwhm_val: UFloat | None = field(default=None, init=False, repr=False)
     _fwhm_label : str = field(default="", init=False, repr=False)
 
     _res_val: UFloat | None = field(default=None, init=False, repr=False)
@@ -60,13 +62,13 @@ class TargetContext:
     def fwhm_val(self) -> UFloat:
         """The fwhm value computed in the resolution analysis task.
         """
-        if self._fhwm_val is None:
+        if self._fwhm_val is None:
             raise AttributeError("FWHM value has not been set yet.")
-        return self._fhwm_val
+        return self._fwhm_val
 
     @fwhm_val.setter
     def fwhm_val(self, value: UFloat):
-        self._fhwm_val = value
+        self._fwhm_val = value
         self._fwhm_label = f"FWHM@{self._energy:.1f} keV: {value} fC"
 
     @property
@@ -171,6 +173,23 @@ class TargetContext:
         except KeyError:
             raise ValueError(f"Unknown task '{task}' for label retrieval.") from None
 
+    def target_context_dict(self) -> dict[str, Any]:
+        """Return a dictionary representation of the target context, specifically for the analysis
+        results file.
+        
+        Returns
+        -------
+        dict[str, Any]
+            A dictionary containing the target context information for serialization in the results
+            file.
+        """
+        return {
+            "target": self.target, "line_val": self.line_val, "sigma": self.sigma,
+            "voltage": self.voltage, "energy": self.energy, "gain": self._gain_val,
+            "fwhm": self._fwhm_val, "resolution": self._res_val,
+            "resolution_escape": self._res_escape_val, "time_from_start": self._time_from_start,
+            "gain_trend": self._gain_trend_val, "model": self.model,}
+
 
 @dataclass
 class ContextBase:
@@ -180,6 +199,7 @@ class ContextBase:
     # Internal attributes for storing results and figures
     _results: dict = field(default_factory=dict, init=False, repr=False)
     _figures: dict = field(default_factory=dict, init=False, repr=False)
+    _run_metadata: dict[str, Any] = field(default_factory=dict, init=False, repr=False)
 
     def data_to_yaml(self, data: Any) -> Any:
         """Convert the results dictionary to a YAML-serializable format.
@@ -189,40 +209,97 @@ class ContextBase:
         data : Any
             The data to convert.
         """
+        out = data
         # If it is a dictionary, process each key/value pair
         if isinstance(data, dict):
-            return {k: self.data_to_yaml(v) for k, v in data.items()}
-        # If it is a numpy array, convert to list and process elements
-        if isinstance(data, np.ndarray):
-            return [self.data_to_yaml(x) for x in data.tolist()]
-        # If it is a ufloat (has nominal_value attribute), extract value and uncertainty
-        if hasattr(data, "nominal_value"):
-            return {
-            "val": float(data.nominal_value),
-            "err": float(data.std_dev)}
+            out = {k: self.data_to_yaml(v) for k, v in data.items()}
         # If it is a fit model, extract relevant information
-        if isinstance(data, modeling.AbstractFitModel):
+        elif isinstance(data, modeling.AbstractFitModel):
             # Extract parameters and their values/errors
             pars_dict = {}
             for par in data:
                 pars_dict[par.name] = {"val": par.value, "err": par.error}
             # Return the fit model information (name, chisquare, dof, parameters)
-            return {
+            out = {
                 "name": data.name(),
                 "chisq": float(data.status.chisquare),
                 "dof": int(data.status.dof),
                 "pars": pars_dict}
-        # If it is a standard number or string, return as is
-        return data
+        # If it is a list/tuple, process each element
+        elif isinstance(data, (list, tuple)):
+            out = [self.data_to_yaml(x) for x in data]
+        # If it is a numpy array, convert to list and process elements
+        elif isinstance(data, np.ndarray):
+            out = [self.data_to_yaml(x) for x in data.tolist()]
+        # Normalize common non-JSON scalar types
+        elif isinstance(data, Path):
+            out = str(data)
+        elif isinstance(data, (datetime.datetime, datetime.date)):
+            out = data.isoformat()
+        # If it is a ufloat (has nominal_value attribute), extract value and uncertainty
+        elif hasattr(data, "nominal_value"):
+            out = {
+                "val": float(data.nominal_value),
+                "err": float(data.std_dev),
+            }
+        return out
 
     def add_figure(self, figure_name: str, figure: Any) -> None:
-        """Add a figure to the private `figures` dictionary."""
+        """Add a figure to the private `figures` dictionary.
+        
+        Arguments
+        ---------
+        figure_name : str
+            The name of the figure.
+        figure : Any
+            The figure object.
+        """
         self._figures[figure_name] = figure
+
+    def update_run_metadata(self, **kwargs: Any) -> None:
+        """Update the run metadata with the provided key-value pairs.
+        
+        This metadata can include information such as input paths, configuration path, path type,
+        and any other relevant information about the analysis run that should be included in the
+        analysis output file.
+        """
+        self._run_metadata.update(kwargs)
+
+    @property
+    def figures_items(self) -> Iterable[tuple[str, Any]]:
+        """Return an iterable of figure name and figure object pairs from the private `figures`
+        dictionary.
+        """
+        return self._figures.items()
+
+    def _output_dir(self, output_dir: Path) -> Path:
+        """Return the output directory for the current context save call.
+        """
+        raise NotImplementedError
+
+    def _save_figures(self, folder_dir: Path, fig_format: str) -> list[dict[str, Any]]:
+        """Save figures and return output results files entries.
+        """
+        raise NotImplementedError
+
+    def _build_analysis_results(self, folder_dir: Path, fig_format: str,
+                            figures_results_entries: list[dict[str, Any]]) -> dict[str, Any]:
+        """Build the run output results file.
+        """
+        raise NotImplementedError
+
+    def _write_results_file(self, folder_dir: Path, run_manifest: dict[str, Any]) -> None:
+        """Write the analysis results file to disk.
+        """
+        run_path = folder_dir / "analysis_run.yaml"
+        with open(run_path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(self.data_to_yaml(run_manifest), f,
+                           sort_keys=False, default_flow_style=False)
 
     def save(self, output_dir: Path, fig_format: str) -> None:
         """Save the context configuration, figures, and results to the specified output
         directory.
-        
+
         Parameters
         ----------
         output_dir : Path
@@ -230,6 +307,16 @@ class ContextBase:
         fig_format : str
             The format to save figures (e.g., 'png', 'pdf').
         """
+        log.info("Saving analysis results")
+        folder_dir = self._output_dir(output_dir)
+        folder_dir.mkdir(parents=True, exist_ok=True)
+        log.info("Saving figures")
+        figures_results_entries = self._save_figures(folder_dir, fig_format)
+        log.info("Building analysis results file and saving to disk")
+        output_results = self._build_analysis_results(folder_dir, fig_format,
+                                                    figures_results_entries)
+        self._write_results_file(folder_dir, output_results)
+        log.success(f"Analysis results saved to {folder_dir}")
 
 
 @dataclass
@@ -374,49 +461,126 @@ class Context(ContextBase):
             raise KeyError(f"Target '{target}' not found in results for task '{task}'.")
         return self._results[task][target]
 
-    @property
-    def results_dir(self) -> Path:
-        """The results directory path based on the analysis paths."""
+    @staticmethod
+    def _safe_source_attr(source: SourceFile, attr: str) -> Any:
+        """Read source metadata fields, tolerating unsupported naming patterns."""
+        try:
+            return getattr(source, attr)
+        except (ValueError, AttributeError):
+            return None
+
+    def _source_dict(self) -> dict[str, Any]:
+        """Return a dictionary representation of the source files in the context, specifically for
+        the analysis results file.
+        
+        This method extracts relevant metadata from each source file and organizes it in a
+        dictionary format suitable for serialization in the results file.
+        """
+        payload: dict[str, Any] = {}
+        for file_name, source in self._sources.items():
+            payload[file_name] = {
+                "path": source.file_path,
+                "voltage": self._safe_source_attr(source, "voltage"),
+                "drift_voltage": self._safe_source_attr(source, "drift_voltage"),
+                "pressure": self._safe_source_attr(source, "pressure"),
+                "start_time": self._safe_source_attr(source, "start_time"),
+                "real_time": self._safe_source_attr(source, "real_time"),
+                "structure": self._safe_source_attr(source, "structure"),
+                "wafer": self._safe_source_attr(source, "wafer"),
+                "date": self._safe_source_attr(source, "date"),
+            }
+        return payload
+
+    def _fit_dict(self) -> dict[str, Any]:
+        """Return a dictionary representation of the fit results in the context, specifically for
+        the analysis results file.
+
+        This method organizes the fit results for each target in a dictionary format suitable for
+        serialization in the results file.
+        """
+        payload: dict[str, Any] = {}
+        for file_name, file_fit in self._fit.items():
+            payload[file_name] = {}
+            for target, target_ctx in file_fit.items():
+                payload[file_name][target] = target_ctx.target_context_dict()
+        return payload
+
+    def _calibration_dict(self) -> dict[str, Any]:
+        """Return a dictionary representation of the calibration artifacts used during the run.
+        
+        This method organizes the calibration information, including the pulse file and the
+        conversion model, in a dictionary format suitable for serialization in the results file.
+        """
+        pulse = self._calibration.get("pulse")
+        model = self._calibration.get("model")
+        return {
+            "pulse_file": pulse.file_path if pulse is not None else None,
+            "pulse_voltages": pulse.voltage if pulse is not None else None,
+            "model": model,
+        }
+
+    def _context_payload(self, include_config: bool = True) -> dict[str, Any]:
+        """Build the core payload for a single-context analysis.
+        """
+        payload = {
+            "inputs": {
+                "config_path": self._run_metadata.get("config_path"),
+                "raw_paths": self._run_metadata.get("input_paths"),
+                "resolved_sources": self.paths,
+                "path_type": self._run_metadata.get("path_type"),
+            },
+            "calibration": self._calibration_dict(),
+            "sources": self._source_dict(),
+            "fit": self._fit_dict(),
+            "tasks": self._results,
+        }
+        if include_config:
+            payload["config"] = self.config.model_dump()
+        return payload
+
+    def context_payload(self, include_config: bool = True) -> dict[str, Any]:
+        """Public wrapper around context payload serialization.
+        """
+        return self._context_payload(include_config=include_config)
+
+    def _output_dir(self, output_dir: Path) -> Path:
+        # Create a unique directory for this run based on timestamp
         for p in self.paths:
             parts = p.parts
             if "data" in parts:
-                idx = parts.index("data") +1
+                idx = parts.index("data") + 1
                 directory = "/".join(parts[idx:-1])
             else:
                 directory = p.parent.name
-        return Path(directory)
-
-    def save(self, output_dir: Path, fig_format: str) -> None:
-        """Save the folders context configuration, figures, and results to the specified output
-        directory.
-
-        Parameters
-        ----------
-        output_dir : Path
-            The directory where to save the context data.
-        fig_format : str
-            The format to save figures (e.g., 'png', 'pdf').
-        """
-        # Create a unique directory for this run based on timestamp
         time_stamp = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
         dir_name = f"{time_stamp}_files"
-        folder_dir = output_dir / self.results_dir / dir_name
-        # Check if directory exists, if not create it
-        if not folder_dir.exists():
-            folder_dir.mkdir(parents=True, exist_ok=True)
-        # Save configuration file
-        config_path = folder_dir / "config.yaml"
-        self.config.to_yaml(config_path)
-        # Save all the figures
+        return output_dir / directory / dir_name
+
+    def _save_figures(self, folder_dir: Path, fig_format: str) -> list[dict[str, Any]]:
+        figures_manifest: list[dict[str, Any]] = []
         for fig_name, fig in self._figures.items():
-            fig_path = folder_dir / f"{fig_name}.{fig_format}"
+            rel_path = Path(f"{fig_name}.{fig_format}")
+            fig_path = folder_dir / rel_path
             if isinstance(fig, plotting.plt.Figure):
                 fig.savefig(fig_path, format=fig_format)
-        # Save the results dictionary as a YAML file
-        results_path = folder_dir / "results.yaml"
-        with open(results_path, "w", encoding="utf-8") as f:
-            yaml_results = self.data_to_yaml(self._results)
-            yaml.safe_dump(yaml_results, f, sort_keys=False, default_flow_style=False)
+                figures_manifest.append({"name": fig_name, "file": str(rel_path)})
+        return figures_manifest
+
+    def _build_analysis_results(self, folder_dir: Path, fig_format: str,
+                            figures_results_entries: list[dict[str, Any]]) -> dict[str, Any]:
+        return {
+            "schema_version": 1,
+            "run": {
+                "run_id": folder_dir.name,
+                "created_at": datetime.datetime.now().isoformat(),
+                "mode": "single",
+                "fig_format": fig_format,
+            },
+            **self._context_payload(),
+            "artifacts": {
+                "figures": figures_results_entries,
+            },
+        }
 
 
 @dataclass
@@ -460,6 +624,10 @@ class FoldersContext(ContextBase):
             raise ValueError("Results dictionary cannot be None")
         self._results[task][target] = results
 
+    def _serialize_folder_context(self, folder_ctx: Context) -> dict[str, Any]:
+        """Serialize one folder-level analysis payload."""
+        return folder_ctx.context_payload(include_config=False)
+
     @property
     def results_dir(self) -> Path:
         """The results directory path based on the analysis paths."""
@@ -478,51 +646,63 @@ class FoldersContext(ContextBase):
             directory = Path("MultiFolders") / directory
         return Path(directory)
 
-    def save(self, output_dir: Path, fig_format: str) -> None:
-        """Save the folders context configuration, figures, and results to the specified output
-        directory.
+    def _output_dir(self, output_dir: Path) -> Path:
+        return output_dir / self.results_dir
 
-        Parameters
-        ----------
-        output_dir : Path
-            The directory where to save the context data.
-        fig_format : str
-            The format to save figures (e.g., 'png', 'pdf').
-        """
-        # pylint: disable=protected-access
-        # Create a unique directory for this run based on folder names and timestamp
-        folder_dir = output_dir / self.results_dir
-        # Check if directory exists, if not create it
-        if not folder_dir.exists():
-            folder_dir.mkdir(parents=True, exist_ok=True)
-        # Save configuration file
-        config_path = folder_dir / "config.yaml"
-        self.config.to_yaml(config_path)
+    def _save_figures(self, folder_dir: Path, fig_format: str) -> list[dict[str, Any]]:
+        figures_manifest: list[dict[str, Any]] = []
         # Save all figures from each folder context
         for folder_name in self.folder_names:
             folder_ctx = self.folder_ctx(folder_name)
             subfolder_dir = folder_dir
+            rel_prefix = Path(".")
             if len(self.folder_names) > 1:
                 subfolder_dir = folder_dir / folder_name
+                rel_prefix = Path(folder_name)
             if not subfolder_dir.exists():
                 subfolder_dir.mkdir(parents=True, exist_ok=True)
-            for fig_name, fig in folder_ctx._figures.items():
-                fig_path = subfolder_dir / f"{fig_name}.{fig_format}"
+            for fig_name, fig in folder_ctx.figures_items:
+                rel_path = rel_prefix / f"{fig_name}.{fig_format}"
+                fig_path = folder_dir / rel_path
                 if isinstance(fig, plotting.plt.Figure):
                     fig.savefig(fig_path, format=fig_format)
-            # Save the subfolder results dictionary as a YAML file
-            results_path = subfolder_dir / f"{folder_name}_results.yaml"
-            with open(results_path, "w", encoding="utf-8") as f:
-                yaml_results = self.data_to_yaml(folder_ctx._results)
-                yaml.safe_dump(yaml_results, f, sort_keys=False, default_flow_style=False)
+                    figures_manifest.append({"name": f"{folder_name}:{fig_name}",
+                                             "file": str(rel_path),
+                                             "folder": folder_name})
         # Save the folders-wide figures
         for fig_name, fig in self._figures.items():
-            fig_path = folder_dir / f"{fig_name}.{fig_format}"
+            rel_path = Path(f"{fig_name}.{fig_format}")
+            fig_path = folder_dir / rel_path
             if isinstance(fig, plotting.plt.Figure):
                 fig.savefig(fig_path, format=fig_format)
-        # Save the folders-wide results dictionary as a YAML file
-        results_path = folder_dir / "folders_results.yaml"
-        yaml_results = self.data_to_yaml(self._results)
-        if yaml_results:
-            with open(results_path, "w", encoding="utf-8") as f:
-                yaml.safe_dump(yaml_results, f, sort_keys=False, default_flow_style=False)
+                figures_manifest.append({"name": fig_name, "file": str(rel_path),
+                                         "scope": "folders"})
+        return figures_manifest
+
+    def _build_analysis_results(self, folder_dir: Path, fig_format: str,
+                            figures_results_entries: list[dict[str, Any]]) -> dict[str, Any]:
+        folders_payload: dict[str, Any] = {}
+        for folder_name in self.folder_names:
+            folder_ctx = self.folder_ctx(folder_name)
+            folders_payload[folder_name] = self._serialize_folder_context(folder_ctx)
+        return {
+            "schema_version": 1,
+            "run": {
+                "run_id": folder_dir.name,
+                "created_at": datetime.datetime.now().isoformat(),
+                "mode": "folders",
+                "fig_format": fig_format,
+            },
+            "config": self.config.model_dump(),
+            "inputs": {
+                "config_path": self._run_metadata.get("config_path"),
+                "raw_paths": self._run_metadata.get("input_paths"),
+                "resolved_folders": self.paths,
+                "path_type": self._run_metadata.get("path_type"),
+            },
+            "folders": folders_payload,
+            "folder_tasks": self._results,
+            "artifacts": {
+                "figures": figures_results_entries,
+            },
+        }

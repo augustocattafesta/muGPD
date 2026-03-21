@@ -182,7 +182,7 @@ def fit_peak(context: Context, subtask: FitSubtaskConfig) -> Context:
     log.success(f"Fitting of target {target} completed")
     # Update the context with the fit results
     target_ctx = TargetContext(target, line_val, sigma, source.voltage, model)
-    target_ctx.energy = context.config.acquisition.e_peak
+    target_ctx.energy = context.config.source.energy
     # Add the fwhm to the target context
     fwhm = SIGMA_TO_FWHM * sigma
     target_ctx.fwhm_val = fwhm
@@ -585,7 +585,7 @@ def compare_resolution(context: FoldersContext, task: CompareResolutionConfig) -
     context : FoldersContext
         The updated context object containing the resolution comparison results.
     """
-    name = "compare_resolution"
+    name = task.task
     target = task.target
     combine = task.combine
     folders_style = context.config.style.folders

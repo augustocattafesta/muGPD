@@ -104,6 +104,38 @@ class SourceFile(FileBase):
             return float(match.group(1))
         return 0.0
 
+    @property
+    def structure(self) -> str:
+        """Structure type of the detector extracted from the file name.
+        """
+        match = re.search(r"_(\d+p\d+[a-zA-Z]*|\d+[Dd])_", self.file_path.name)
+        if match is not None:
+            value = match.group(1).upper()
+            return value.replace("P", ".")
+        return "Unknown"
+
+    @property
+    def wafer(self) -> str:
+        """Wafer type of the detector extracted from the file name.
+        """
+        match = re.search(r"_([Ww]\d+[a-zA-Z]?)_", self.file_path.name)
+        if match is not None:
+            return match.group(1).upper()
+        return "Unknown"
+
+    @property
+    def date(self) -> datetime.date | str:
+        """Date of the acquisition extracted from the file name.
+        """
+        match = match = re.search(r"_(\d{6}|\d{8})_", f"_{self.file_path.name}_")
+        if match is not None:
+            date_str = match.group(1)
+            if len(date_str) == 6:
+                return datetime.datetime.strptime(date_str, "%d%m%y").date()
+            if len(date_str) == 8:
+                return datetime.datetime.strptime(date_str, "%d%m%Y").date()
+        return "Unknown"
+
 
 class PulsatorFile(FileBase):
     """Class to analyze a calibration pulse file.
