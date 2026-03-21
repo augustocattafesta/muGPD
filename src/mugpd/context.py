@@ -307,12 +307,12 @@ class ContextBase:
         fig_format : str
             The format to save figures (e.g., 'png', 'pdf').
         """
-        log.info(f"Saving analysis results")
+        log.info("Saving analysis results")
         folder_dir = self._output_dir(output_dir)
         folder_dir.mkdir(parents=True, exist_ok=True)
-        log.info(f"Saving figures")
+        log.info("Saving figures")
         figures_results_entries = self._save_figures(folder_dir, fig_format)
-        log.info(f"Building analysis results file and saving to disk")
+        log.info("Building analysis results file and saving to disk")
         output_results = self._build_analysis_results(folder_dir, fig_format,
                                                     figures_results_entries)
         self._write_results_file(folder_dir, output_results)
