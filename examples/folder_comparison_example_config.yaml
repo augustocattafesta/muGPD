@@ -1,0 +1,63 @@
+pipeline:
+  # Execute the calibration
+  - task: calibration
+    show: false
+
+  - task: fit_spec
+    subtasks:
+      - target: main
+        model: Fe55Forest
+
+  # Estimate the gain from the main line  
+  - task: gain
+    target: main
+
+  # Estimate the resolution from the main line
+  - task: resolution
+    target: main
+
+
+  # Execute the task to combine the gain results from two folders and fit the
+  # data with a single exponential model
+  - task: compare_gain
+    target: main
+    combine:                                     # Combine the data
+      - folder
+      - folder1
+
+  # Execute the task to show the energy resolution results from the two folders
+  # without combining the data
+  - task: compare_resolution
+    target: main
+
+# Define the styles for comparison plots
+style:
+  # Set the labels for gain and resolution comparison plot
+  tasks:
+    compare_gain:
+      title: Combine gain results
+      legend_label: $\mu$GPD
+      yscale: linear
+
+    compare_resolution:
+      title: Compare energy resolution results
+      legend_label: $\mu$GPD
+
+  folders:
+    # Set combined data style (only for gain)
+    combine:
+      label: Combined data
+      marker: .
+      color: black
+      linestyle: "--"
+    
+    # Set folder data style (for resolution)
+    folder:
+      label: Folder 0 data
+      marker: x
+      color: black
+
+    folder1:
+      label: Folder 1 data
+      marker: v
+      color: red

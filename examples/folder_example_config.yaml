@@ -1,0 +1,44 @@
+pipeline:
+  # Execute the calibration
+  - task: calibration
+    show: false
+
+  - task: fit_spec
+    subtasks:
+      # Fit the main line of the spectrum with a double Gaussian.
+      - target: main
+        model: Fe55Forest
+
+    # Estimate the gain from the main line  
+  - task: gain
+    target: main
+    show: true        # Plot gain vs back voltage
+    subtasks:
+      - target: gain
+        model: Exponential
+
+    # Estimate the resolution from the main line 
+  - task: resolution
+    target: main
+    show: true        # Plot resolution vs back voltage
+  
+# Set the style of the tasks plot
+style:
+  tasks:
+    # Configure gain task plot
+    gain:
+      marker: d
+      linestyle: --
+      color: black
+      label: Gain data
+      legend_label: $\mu$GPD
+      title: Gain analysis
+      yscale: log
+    
+    resolution:
+      marker: .
+      color: blue
+      label: Resolution data
+      legend_label: $\mu$GPD
+      title: Energy resolution analysis
+      annotate_min: true
