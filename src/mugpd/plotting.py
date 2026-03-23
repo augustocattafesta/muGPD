@@ -167,12 +167,11 @@ def plot_task(xdata: np.ndarray, ydata: np.ndarray, *models: AbstractFitModel,
         model_label = kwargs.get(f"model{i}_label")
         fit_output = kwargs.get("fit_output", False)
         if isinstance(model, FitModelSum):
-            plot_components = False
             model.plot(fit_output=fit_output,
                        label=model_label,
                        linestyle=kwargs["linestyle"],
                        color=last_line_color(),
-                       plot_components=plot_components)
+                       plot_components=False)
         else:
             model.plot(fit_output=fit_output,
                        label=model_label,
@@ -240,6 +239,15 @@ def plot_compare_task(ax: plt.Axes, xdata: np.ndarray, ydata: np.ndarray,
     # Plot the model if provided
     if model:
         model_label = kwargs.get("model_label")
-        model.plot(label=model_label,
-                   linestyle=kwargs["linestyle"],
-                   color=last_line_color())
+        fit_output = kwargs.get("fit_output", False)
+        if isinstance(model, FitModelSum):
+            model.plot(fit_output=fit_output,
+                       label=model_label,
+                       linestyle=kwargs["linestyle"],
+                       color=last_line_color(),
+                       plot_components=False)
+        else:
+            model.plot(fit_output=fit_output,
+                    label=model_label,
+                    linestyle=kwargs["linestyle"],
+                    color=last_line_color())

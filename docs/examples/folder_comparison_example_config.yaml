@@ -30,9 +30,9 @@ pipeline:
     combine:                                     # Combine the data
       - folder
       - folder1
-    # Perform a fit on the combined dataas
+    # Perform a fit on the combined data
     subtasks:
-      - target: compare_fit
+      - target: combine_fit
         model: Exponential
 
   # Execute the task to show the energy resolution results from the two folders
