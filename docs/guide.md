@@ -142,27 +142,6 @@ If the analysis is performed on a single file, there are no other keys to specif
 ```
 
 
-#### Gain compare between folders
-
-This task allows to compare the gain results of two or more different folders on the same plot. To execute this task, it is required that at least a `gain` task has been completed on a given `target` emission line.
-
-It is also possible to combine the gain estimates from a list of folders specified in the `combine` key, and also perform a single exponential fit on the data from these folders.
-
-If there are multiple data taken at a given voltage, the mean of the gain estimated from these files is calculated.
-
-```yaml
-  - task: compare_gain
-    target: main_peak
-    xaxis: back                  # Optional, quantity to put on xaxis
-    combine:                     # Optional, combine the data of the specified folders
-      - folder0
-      - folder1
-```
-
-
-#### Drift varying
-
-
 #### Resolution estimate
 
 This task performs the estimate of the resolution of the detector using the spectral fitting results of a given `target`, previously specified during the *fit_spec* task. This estimate is made using only the fitted FWHM of the line and the calibrated charge of the line center:
@@ -195,18 +174,23 @@ The `show` and `fit` keys can be specified if working on multiple files.
     target_escape: escape_peak
 ```
 
-#### Resolution compare between folders
+#### Compare gain and resolution between folders
 
-This task allows to compare the energy resolution between different folders. As for `compare_gain` task, you need first to perform a `resolution` task on a `target` to compare the results. 
+This task allows to compare the results of gain and resolution obtained from different folders and show them on the same plot. To execute this task, it is required that at least a `gain` or `resolution` task has been performed.
 
-You can combine the results of different folders by specifying a list with the names of folders to combine in the `combine` key.
+It is also possible to combine the results of some folders into a single dataset. If the combined results have to be fitted with a given model, it is possible to perform a fitting subtask specifying it with the `subtasks` key. The syntax is the same as the previous tasks.
 
 ```yaml
-  - task: compare_resolution
+  - task: compare
+    quantity: gain               # Specify the quantity to compare (gain or resolution)
     target: main_peak
-    combine:      # Optional, combine the results from the specified folders
+    xaxis: back                  # Optional, quantity to put on xaxis
+    combine:                     # Optional, combine the data of the specified folders
       - folder0
       - folder1
+    subtasks:                    # Optional, fit the combined data
+      - target: combine_fit
+        model: Exponential
 ```
 
 #### Plot the spectrum

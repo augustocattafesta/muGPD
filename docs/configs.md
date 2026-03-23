@@ -13,15 +13,11 @@ In this documentation there is a full explanation of all the tasks that can be e
 
 ::: src.mugpd.config.GainConfig
 
-::: src.mugpd.config.CompareGainConfig
-
 ::: src.mugpd.config.ResolutionConfig
 
 ::: src.mugpd.config.ResolutionEscapeConfig
 
-::: src.mugpd.config.CompareResolutionConfig
-
-::: src.mugpd.config.CompareTrendConfig
+::: src.mugpd.config.CompareConfig
 
 ::: src.mugpd.config.DriftConfig
 
