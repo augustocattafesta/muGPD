@@ -112,7 +112,7 @@ def get_model_label(task: str, model: AbstractFitModel) -> str:
         The fitted model for which to generate the label.
     """
     # If gain task, return the scale parameter of the exponential
-    if task in ("gain", "compare_gain"):
+    if task in ("gain", "compare_gain", "compare"):
         if isinstance(model, aptapy.models.Exponential):
             return f"Scale: {-model.scale.ufloat()} V"
         return model.name()

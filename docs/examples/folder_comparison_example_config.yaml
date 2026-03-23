@@ -11,6 +11,10 @@ pipeline:
   # Estimate the gain from the main line  
   - task: gain
     target: main
+    xaxis: back
+    subtasks:
+      - target: gain_fit
+        model: Exponential
 
   # Estimate the resolution from the main line
   - task: resolution
@@ -19,15 +23,23 @@ pipeline:
 
   # Execute the task to combine the gain results from two folders and fit the
   # data with a single exponential model
-  - task: compare_gain
+  - task: compare
+    quantity: gain
     target: main
+    xaxis: back
     combine:                                     # Combine the data
       - folder
       - folder1
+    # Perform a fit on the combined dataas
+    subtasks:
+      - target: compare_fit
+        model: Exponential
 
   # Execute the task to show the energy resolution results from the two folders
   # without combining the data
-  - task: compare_resolution
+  - task: compare
+    quantity: resolution
+    xaxis: back
     target: main
 
 # Define the styles for comparison plots
