@@ -2,6 +2,8 @@
 ----------------
 
 
+### Version 0.0.3 (2026-03-23)
+
 - Analysis output file refactored.
 - Compare tasks refactored into a single compare task that can handle all the different quantities to compare.
 - Pull requests merged and issues closed:
