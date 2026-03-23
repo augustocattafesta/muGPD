@@ -9,9 +9,7 @@ from uncertainties import unumpy
 
 from ._logger import log
 from .config import (
-    CompareGainConfig,
-    CompareResolutionConfig,
-    CompareTrendConfig,
+    CompareConfig,
     DriftConfig,
     FitSubtaskConfig,
     GainConfig,
@@ -23,6 +21,7 @@ from .config import (
 from .context import Context, FoldersContext, TargetContext
 from .plotting import (
     XAXIS_LABELS,
+    YAXIS_LABELS,
     get_label,
     get_model_label,
     get_xrange,
@@ -39,6 +38,13 @@ from .utils import (
     find_peaks_iterative,
     gain,
     load_class,
+)
+
+XAXIS_DICT = dict(
+    back="voltages",
+    drift="drift_voltages",
+    pressure="pressures",
+    time="times"
 )
 
 
@@ -282,164 +288,6 @@ def gain_task(context: Context, task: GainConfig) -> Context:
     return context
 
 
-def compare_gain(context: FoldersContext, task: CompareGainConfig) -> FoldersContext:
-    """Compare the gain of multiple folders vs voltage using the fit results obtained from the
-    source data.
-
-    Parameters
-    ---------
-    context : FoldersContext
-        The context object containing the fit results.
-    task : CompareGainConfig
-        The gain comparison configuration instance.
-    
-    Returns
-    -------
-    context : FoldersContext
-        The updated context object containing the gain comparison results.
-    """
-    # pylint: disable=too-many-statements
-    name = task.task
-    target = task.target
-    combine = task.combine
-    xaxis = task.xaxis
-    xaxis_data = dict(
-        back="voltages",
-        drift="drift_voltages",
-        pressure="pressures",
-        time="times"
-    )
-    folders_style = context.config.style.folders
-    # Get the different folder names
-    folder_names = context.folder_names
-    # Create empty arrays to store gain values and voltages
-    y = np.zeros(len(combine), dtype=object)
-    yerr = np.zeros(len(combine), dtype=object)
-    x = np.zeros(len(combine), dtype=object)
-    # Create the figure for the gain comparison
-    fig, ax = plt.subplots(num="gain_comparison")
-    # Iterate over all folders and plot the gain values
-    j = 0
-    for folder_name in folder_names:
-        folder_ctx = context.folder_ctx(folder_name)
-        folder_gain = folder_ctx.task_results("gain", target)
-        gain_vals = folder_gain["gain_vals"]
-        xdata = folder_gain[xaxis_data[xaxis]]
-        # If not aggregating, plot each folder separately
-        if folder_name not in combine:
-            style = folders_style.get(folder_name, PlotStyleConfig()).model_dump()
-            # Be careful because if the fit was performed with another xaxis quantity there might
-            # be a mismatch between the xdata and the model. We can try to fix this in the future.
-            model = None
-            models = [v['model'] for v in folder_gain.values()
-                      if isinstance(v, dict) and 'model' in v]
-            if models:
-                model = models[0]
-            plot_kwargs = dict(
-                model_label=get_model_label(name, model) if model else None,
-                **style)
-            plot_compare_task(ax, xdata, gain_vals, model, **plot_kwargs)
-        # If aggregating, store the data together for later fitting and plotting
-        else:
-            y[j] = unumpy.nominal_values(gain_vals)
-            yerr[j] = unumpy.std_devs(gain_vals)
-            x[j] = xdata
-            j += 1
-    if combine:
-        # Concatenate all data and fit with an exponential model
-        y = np.concatenate(y)
-        yerr = np.concatenate(yerr)
-        x = np.concatenate(x)
-        # Calculate the mean gain for each repeated voltage
-        x, y, yerr = average_repeats(x, y, yerr)
-        model = aptapy.models.Exponential()
-        model.fit(x, y, sigma=yerr, absolute_sigma=True)
-        # Plot the aggregated data and fit model
-        style = folders_style.get("combine", PlotStyleConfig()).model_dump()
-        plot_kwargs = dict(
-            model_label=get_model_label(name, model),
-            **style)
-        plot_compare_task(ax, x, unumpy.uarray(y, yerr), model, **plot_kwargs)
-        # Update the context with the fit results
-        context.add_task_results(name, target, dict(model=model))
-    # Define the task plot keyword arguments for style and labels
-    task_style = context.config.style.tasks.get(name, PlotStyleConfig()).model_dump()
-    # Set the title of the plot
-    if task_style["title"] is not None:
-        plt.title(task_style["title"])
-    # Set the labels and the axis scales
-    plt.xlabel(XAXIS_LABELS[xaxis])
-    plt.ylabel("Gain")
-    plt.xscale(task_style["xscale"])
-    plt.yscale(task_style["yscale"])
-    # Write the legend and show the plot
-    write_legend(task_style["legend_label"], loc=task_style["legend_loc"])
-    plt.tight_layout()
-    if not task.show:
-        plt.close(fig)
-    # Add the figure to the context
-    context.add_figure(name, fig)
-    return context
-
-
-def compare_trend(context: FoldersContext, task: CompareTrendConfig) -> FoldersContext:
-    """Compare the gain trend of multiple folders vs time using the fit results obtained from
-    the source data.
-
-    Parameters
-    ---------
-    context : FoldersContext
-        The context object containing the fit results.
-    task : CompareTrendConfig
-        The gain trend comparison configuration instance.
-    
-    Returns
-    -------
-    context : FoldersContext
-        The updated context object containing the gain trend comparison results.
-    """
-    # Access the task name and the target line
-    name = task.task
-    target = task.target
-    # Load the folder style configurations
-    folder_style = context.config.style.folders
-    # Get folder names
-    folder_names = context.folder_names
-    fig = plt.figure("trend_comparison")
-    # Iterate over all folders and load gain trend results
-    for folder_name in folder_names:
-        folder_ctx = context.folder_ctx(folder_name)
-        trend = folder_ctx.task_results("gain_trend", target)
-        times = trend.get("times", [])
-        g_val = unumpy.nominal_values(trend.get("gain_vals", []))
-        g_err = unumpy.std_devs(trend.get("gain_vals", []))
-        # Load the specific folder plot style
-        style = folder_style.get(folder_name, PlotStyleConfig()).model_dump(exclude_none=True)
-        # Plot the data
-        plt.errorbar(times, g_val, yerr=g_err,
-                     marker=style.get("marker", "."),
-                     color=style.get("color", None),
-                     ls="",
-                     label=style.get("label", folder_name))
-        for key, model_target in trend.items():
-            if key in ["times", "gain_vals"]:
-                continue
-            # Load the fit model and plot, if present
-            model = model_target.get("model", None)
-            if model:
-                model.plot(fit_output=True, plot_components=False,
-                           linestyle=style.get("linestyle", "-"),
-                           color=style.get("color", last_line_color()))
-    plt.xlabel("Time [hours]")
-    plt.ylabel("Gain")
-    # write_legend(label)
-    if not task.show:
-        plt.close(fig)
-    # Add the figure to the context
-    context.add_figure(name, fig)
-    return context
-
-
 def resolution_task(context: Context, task: ResolutionConfig) -> Context:
     """Calculate the energy resolution of the detector using the fit results obtained from the
     source data. This estimate is based on the position and the width of the target spectral
@@ -569,68 +417,69 @@ def resolution_escape(context: Context, task: ResolutionEscapeConfig) -> Context
     return context
 
 
-def compare_resolution(context: FoldersContext, task: CompareResolutionConfig) -> FoldersContext:
-    """Compare the energy resolution of multiple folders vs voltage using the results obtained
-    from the resolution task.
-
-    Parameters
-    ----------
-    context : FoldersContext
-        The context object containing the resolution results.
-    task : CompareResolutionConfig
-        The resolution comparison configuration instance.
-    
-    Returns
-    -------
-    context : FoldersContext
-        The updated context object containing the resolution comparison results.
-    """
+def compare(context: FoldersContext, task: CompareConfig) -> FoldersContext:
     name = task.task
-    target = task.target
+    quantity = task.quantity
     combine = task.combine
-    folders_style = context.config.style.folders
-    # Get the different folder names
-    folder_names = context.folder_names
-    # Create the empty arrays to store resolution values and voltages
+    task_results = dict(
+        gain="gain_vals",
+        resolution="res_vals",
+        drift="drift_voltages",
+    )
+    plot_styles = context.config.style.folders
+    # Create empty arrays to store x and y values
     y = np.zeros(len(combine), dtype=object)
     yerr = np.zeros(len(combine), dtype=object)
     x = np.zeros(len(combine), dtype=object)
-    # Create the figure for the resolution comparison
-    fig, ax = plt.subplots(num="resolution_comparison")
-    # Iterate over all folders and plot the resolution values
-    j = 0
-    for folder_name in folder_names:
+    # Create the figure for the comparison
+    fig, ax = plt.subplots(num=f"{quantity}_comparison")
+    # Iterate over all folders and plot the quantity values
+    combine_index = 0
+    for folder_name in context.folder_names:
         folder_ctx = context.folder_ctx(folder_name)
-        folder_res = folder_ctx.task_results("resolution", target)
-        res_vals = folder_res.get("res_vals", [])
-        voltages = folder_res.get("voltages", [])
+        quantity_results = folder_ctx.task_results(quantity, task.target)
+        xdata = quantity_results[XAXIS_DICT[task.xaxis]]
+        ydata = quantity_results[task_results[quantity]]
         # If not aggregating, plot each folder separately
+        model = None
         if folder_name not in combine:
-            style = folders_style.get(folder_name, PlotStyleConfig()).model_dump()
-            plot_compare_task(ax, voltages, res_vals, None, **style)
+            folder_style = plot_styles.get(folder_name, PlotStyleConfig()).model_dump()
+            models = [v['model'] for v in quantity_results.values()
+                      if isinstance(v, dict) and 'model' in v]
+            if models:
+                model = models[0]
+            plot_kwargs = dict(
+                model_label=get_model_label(name, model) if model else None,
+                **folder_style)
+            plot_compare_task(ax, xdata, ydata, model, **plot_kwargs)
         # If aggregating, store the data together for later plotting
         else:
-            y[j] = unumpy.nominal_values(res_vals)
-            yerr[j] = unumpy.std_devs(res_vals)
-            x[j] = voltages
-            j += 1
+            y[combine_index] = unumpy.nominal_values(ydata)
+            yerr[combine_index] = unumpy.std_devs(ydata)
+            x[combine_index] = xdata
+            combine_index += 1
     if combine:
         # Concatenate all data
         y = np.concatenate(y)
         yerr = np.concatenate(yerr)
         x = np.concatenate(x)
         x, y, yerr = average_repeats(x, y, yerr)
-        # Plot the aggregated data
-        style = folders_style.get("combine", PlotStyleConfig()).model_dump()
-        plot_compare_task(ax, x, unumpy.uarray(y, yerr), None, **style)
+        if task.subtasks:
+            model = _fit_subtask(x, unumpy.uarray(y, yerr), task.subtasks[0])
+            model_label = get_model_label(name, model)
+        plot_kwargs = dict(
+            model_label=model_label if task.subtasks else None,
+            **plot_styles.get("combine", PlotStyleConfig()).model_dump())
+        plot_compare_task(ax, x, unumpy.uarray(y, yerr), model, **plot_kwargs)
     # Define the task plot keyword arguments for style and labels
-    task_style = context.config.style.tasks.get(name, PlotStyleConfig()).model_dump()
+    task_style = context.config.style.tasks.get(f"{name}_{quantity}",
+                                                PlotStyleConfig()).model_dump()
     # Set the title of the plot
     if task_style["title"] is not None:
         plt.title(task_style["title"])
     # Set the labels and the axis scales
-    plt.xlabel("Voltage [V]")
-    plt.ylabel(r"$\Delta$E/E")
+    plt.xlabel(XAXIS_LABELS[task.xaxis])
+    plt.ylabel(YAXIS_LABELS.get(quantity, quantity))
     plt.xscale(task_style["xscale"])
     plt.yscale(task_style["yscale"])
     # Write the legend and show the plot
@@ -639,7 +488,7 @@ def compare_resolution(context: FoldersContext, task: CompareResolutionConfig) -
     if not task.show:
         plt.close(fig)
     # Add the figure to the context
-    context.add_figure(name, fig)
+    context.add_figure(f"compare_{quantity}", fig)
     return context
 
 

@@ -12,14 +12,16 @@ pipeline:
     # Estimate the gain from the main line  
   - task: gain
     target: main
-    show: true        # Plot gain vs back voltage
+    xaxis: back
     subtasks:
       - target: gain
         model: Exponential
+    show: true        # Plot gain vs back voltage
 
     # Estimate the resolution from the main line 
   - task: resolution
     target: main
+    back: xaxis
     show: true        # Plot resolution vs back voltage
   
 # Set the style of the tasks plot

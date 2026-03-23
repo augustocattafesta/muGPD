@@ -282,68 +282,38 @@ class CompareTaskDefaults:
     combine: list[str] = Field(default_factory=list)
 
 
-class CompareGainConfig(AbstractConfig):
-    """Compare the gain vs back voltage curves for multiple source folders. A gain task must be
-    performed before the compare gain task.
-
+class CompareConfig(AbstractConfig):
+    """Compare the specified quantity for multiple source folders. A task that calculates the
+    specified quantity must be performed.
+    
     Attributes
     ----------
     task: str
-        Name of the task, to perform it must be 'compare_gain'.
+        Name of the task, to perform it must be 'compare'.
+    quantity: str
+        The name of the quantity to compare. This must be the same as the target name of the
+        fitting subtask used for the calculation of the quantity.
     target: str
-        The target name of the fitting subtask to use for the gain calculation.
+        The target name of the fitting subtask to use for the calculation of the quantity.
+    xaxis: str, optional
+        The x-axis to use for the comparison plot. The choices are between 'back', 'drift',
+        'time' and 'pressure'. Default is 'back'.
     combine: list[str], optional
         List of folder names to combine in the same curve. If a folder name is not specified,
         another curve will be generated in the same plot. Default is an empty list, which means
         that no folders will be combined.
+    subtasks: list[FitSubtaskConfig] | None
+        Fitting subtask to perform on the combined data. If not specified, no fit will be performed
+        on the combined data. Default is None.
     show: bool, optional
-        Whether to generate and show the plot of the gain comparison. Default is True.
+        Whether to generate and show the plot of the comparison. Default is True.
     """
-    task: Literal["compare_gain"]
+    task: Literal["compare"]
+    quantity: str
     target: str
     xaxis: str = TaskDefaults.xaxis
     combine: list[str] = CompareTaskDefaults.combine
-    show: bool = TaskDefaults.show
-
-
-class CompareResolutionConfig(AbstractConfig):
-    """Compare the resolution vs back voltage curves for multiple source folders. A resolution task
-    must be performed before the compare resolution task.
-
-    Attributes
-    ----------
-    task: str
-        Name of the task, to perform it must be 'compare_resolution'.
-    target: str
-        The target name of the fitting subtask to use for the resolution calculation.
-    combine: list[str], optional
-        List of folder names to combine in the same curve. If a folder name is not specified,
-        another curve will be generated in the same plot. Default is an empty list, which means
-        that no folders will be combined.
-    show: bool, optional
-        Whether to generate and show the plot of the resolution comparison. Default is True.
-    """
-    task: Literal["compare_resolution"]
-    target: str
-    combine: list[str] = CompareTaskDefaults.combine
-    show: bool = TaskDefaults.show
-
-
-class CompareTrendConfig(AbstractConfig):
-    """Compare the gain trends as a function of time for multiple folders. A gain trend task must
-    be performed before the compare trend task.
-
-    Attributes
-    ----------
-    task: str
-        Name of the task, to perform it must be 'compare_trend'.
-    target: str
-        The target name of the fitting subtask to use for the gain trend calculation.
-    show: bool, optional
-        Whether to generate and show the plot of the gain trend comparison. Default is True.
-    """
-    task: Literal["compare_trend"]
-    target: str
+    subtasks: list[FitSubtaskConfig] | None = Field(default=None)
     show: bool = TaskDefaults.show
 
 
@@ -480,8 +450,7 @@ class StyleConfig(BaseModel):
 
 
 TaskType = CalibrationConfig | FitSpecConfig | GainConfig | ResolutionConfig | \
-    ResolutionEscapeConfig | PlotConfig | DriftConfig | CompareGainConfig | \
-    CompareResolutionConfig | CompareTrendConfig
+    ResolutionEscapeConfig | PlotConfig | DriftConfig | CompareConfig
 
 
 class AppConfig(BaseModel):

@@ -1,13 +1,3 @@
-acquisition:
-  date: "2026-01-1"
-  chip: chip
-  structure: structure
-  gas: Ar
-  w: 26.
-  element: 55Fe
-  e_peak: 5.9
-
-
 pipeline:
   # Calibrate the ADC counts with the calibration file
   - task: calibration
