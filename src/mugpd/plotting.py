@@ -17,6 +17,13 @@ XAXIS_LABELS = dict(
 )
 
 
+YAXIS_LABELS = {
+        "gain": "Gain",
+        "resolution": r"$\Delta$E/E",
+        "drift": "Drift Voltage [V]",
+    }
+
+
 def write_legend(label: str | None, *axs: plt.Axes | None, loc: str = "best" ) -> None:
     # pylint: disable=protected-access
     valid_axs: list[plt.Axes] = [ax for ax in axs if ax is not None]

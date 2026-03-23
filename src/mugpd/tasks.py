@@ -21,6 +21,7 @@ from .config import (
 from .context import Context, FoldersContext, TargetContext
 from .plotting import (
     XAXIS_LABELS,
+    YAXIS_LABELS,
     get_label,
     get_model_label,
     get_xrange,
@@ -37,6 +38,13 @@ from .utils import (
     find_peaks_iterative,
     gain,
     load_class,
+)
+
+XAXIS_DICT = dict(
+    back="voltages",
+    drift="drift_voltages",
+    pressure="pressures",
+    time="times"
 )
 
 
@@ -413,12 +421,6 @@ def compare(context: FoldersContext, task: CompareConfig) -> FoldersContext:
     name = task.task
     quantity = task.quantity
     combine = task.combine
-    xaxis_data = dict(
-        back="voltages",
-        drift="drift_voltages",
-        pressure="pressures",
-        time="times"
-    )
     task_results = dict(
         gain="gain_vals",
         resolution="res_vals",
@@ -436,7 +438,7 @@ def compare(context: FoldersContext, task: CompareConfig) -> FoldersContext:
     for folder_name in context.folder_names:
         folder_ctx = context.folder_ctx(folder_name)
         quantity_results = folder_ctx.task_results(quantity, task.target)
-        xdata = quantity_results[xaxis_data[task.xaxis]]
+        xdata = quantity_results[XAXIS_DICT[task.xaxis]]
         ydata = quantity_results[task_results[quantity]]
         # If not aggregating, plot each folder separately
         model = None
@@ -463,27 +465,21 @@ def compare(context: FoldersContext, task: CompareConfig) -> FoldersContext:
         x = np.concatenate(x)
         x, y, yerr = average_repeats(x, y, yerr)
         if task.subtasks:
-            subtask = task.subtasks[0]
-            model = _fit_subtask(x, unumpy.uarray(y, yerr), subtask)
+            model = _fit_subtask(x, unumpy.uarray(y, yerr), task.subtasks[0])
             model_label = get_model_label(name, model)
-        combine_style = plot_styles.get("combine", PlotStyleConfig()).model_dump()
         plot_kwargs = dict(
             model_label=model_label if task.subtasks else None,
-            **combine_style)
+            **plot_styles.get("combine", PlotStyleConfig()).model_dump())
         plot_compare_task(ax, x, unumpy.uarray(y, yerr), model, **plot_kwargs)
     # Define the task plot keyword arguments for style and labels
-    task_style = context.config.style.tasks.get(f"{name}_{quantity}", PlotStyleConfig()).model_dump()
+    task_style = context.config.style.tasks.get(f"{name}_{quantity}",
+                                                PlotStyleConfig()).model_dump()
     # Set the title of the plot
     if task_style["title"] is not None:
         plt.title(task_style["title"])
     # Set the labels and the axis scales
     plt.xlabel(XAXIS_LABELS[task.xaxis])
-    ylabel = {
-        "gain": "Gain",
-        "resolution": r"$\Delta$E/E",
-        "drift": "Drift Voltage [V]",
-    }.get(quantity, quantity)
-    plt.ylabel(ylabel)
+    plt.ylabel(YAXIS_LABELS.get(quantity, quantity))
     plt.xscale(task_style["xscale"])
     plt.yscale(task_style["yscale"])
     # Write the legend and show the plot
