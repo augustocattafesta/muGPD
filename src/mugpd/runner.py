@@ -9,6 +9,7 @@ from .tasks import (
     calibration,
     compare,
     drift,
+    fit_noise,
     fit_peak,
     gain_task,
     plot_spectrum,
@@ -20,11 +21,11 @@ TaskFunction = Callable[..., Context]
 TaskFunctionFolders = Callable[..., FoldersContext]
 
 TASK_REGISTRY: dict[str, TaskFunction] = {
+    "drift": drift,
     "gain": gain_task,
+    "plot": plot_spectrum,
     "resolution": resolution_task,
     "resolution_escape": resolution_escape,
-    "drift": drift,
-    "plot": plot_spectrum,
 }
 
 

@@ -11,6 +11,7 @@ from ._logger import log
 from .config import (
     CompareConfig,
     DriftConfig,
+    FitNoiseConfig,
     FitSubtaskConfig,
     GainConfig,
     PlotConfig,
@@ -140,7 +141,8 @@ def calibration(context: Context) -> Context:
 
 
 def fit_peak(context: Context, subtask: FitSubtaskConfig) -> Context:
-    """Perform the fitting of a spectral emission line in the source data.
+    """Perform the fitting of a spectral emission line in the source data. If requested, the noise
+    can be fitted and subtracted from the spectrum before fitting the peak. 
 
     Parameters
     ----------
@@ -158,15 +160,47 @@ def fit_peak(context: Context, subtask: FitSubtaskConfig) -> Context:
     """
     # Access target, model and fit parameters
     target = subtask.target
-    model = load_class(subtask.model)[0]()
-    log.info(f"Fitting target {target} with model {model.__class__.__name__}")
     fit_pars = subtask.fit_pars
     # Access the last source data added to the context and get the histogram
     source = context.last_source
     hist = source.hist
+    content = hist.content
+    bin_centers = hist.bin_centers()
+    noise_config = context.config.fit_spec.noise
+    if noise_config.subtract and source.noise_subtracted is False:
+        noise_model = load_class(noise_config.model)[0]()
+        log.info(f"Subtracting noise from the spectrum fitting with {noise_model.name()} model")
+        # Freeze the parameters of the noise model according to the configuration
+        for param, value in noise_config.freeze.items():
+            attr = getattr(noise_model, param)
+            attr.freeze(value)
+            log.info(f"Freezing parameter {param} to value {value} in noise" \
+                      f" {noise_model.name()} model")
+        # Find the index of the bins with content > 0
+        idx = np.where(content > 0)[0]
+        # Fit the first n bins with an exponential
+        x_noise = bin_centers[idx][1:noise_config.nbins + 1]
+        y_noise = content[idx][1:noise_config.nbins + 1]
+        noise_model.fit(x_noise, y_noise, sigma=np.sqrt(y_noise))
+        # Subtract the noise model from the histogram
+        subtracted_content = content.copy()
+        # Set the content of the first bin to 0 because the MCA threshold lose some counts
+        subtracted_content[idx[0]] = 0
+        # Subtract the noise model from the bins with content > 0, starting from the second bin
+        subtracted_content[idx[1:]] -= noise_model(bin_centers[idx][1:noise_config.nbins + 1])
+        # Set any negative content to 0
+        subtracted_content[subtracted_content < 0] = 0
+        hist.set_content(subtracted_content)
+        # Updating the source object to avoid multiple noise subtractions if multiple fitting
+        # subtasks are defined in the configuration file
+        source.noise_subtracted = True
+        log.success("Noise subtraction completed")
+    # Load the model and fit the data
+    model = load_class(subtask.model)[0]()
+    log.info(f"Fitting target {target} with model {model.name()}")
     # Without a proper initialization of xmin and xmax the fit doesn't converge
     kwargs = fit_pars.model_dump()
-    x_peak = hist.bin_centers()[hist.content > 0][5:][np.argmax(hist.content[hist.content > 0][5:])]
+    x_peak = bin_centers[hist.content > 0][5:][np.argmax(hist.content[hist.content > 0][5:])]
     if fit_pars.xmin == float("-inf") and fit_pars.xmax == float("inf"):
         kwargs["xmin"] = x_peak - 0.3 * np.sqrt(x_peak)
         kwargs["xmax"] = x_peak + 0.3 * np.sqrt(x_peak)
@@ -184,14 +218,13 @@ def fit_peak(context: Context, subtask: FitSubtaskConfig) -> Context:
         line_val = reference_energy / model.status.correlated_pars[1]
         sigma = model.status.correlated_pars[2]
     else:
-        raise TypeError(f"Model of type {type(model)} not supported in fit_peak task")
+        raise TypeError(f"Model of type {model.name()} not supported in fit_peak task")
     log.success(f"Fitting of target {target} completed")
     # Update the context with the fit results
     target_ctx = TargetContext(target, line_val, sigma, source.voltage, model)
     target_ctx.energy = context.config.source.energy
     # Add the fwhm to the target context
-    fwhm = SIGMA_TO_FWHM * sigma
-    target_ctx.fwhm_val = fwhm
+    target_ctx.fwhm_val = SIGMA_TO_FWHM * sigma
     # Save the target context in the main context
     context.add_target_ctx(source, target_ctx)
     return context

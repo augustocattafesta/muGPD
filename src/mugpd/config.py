@@ -110,6 +110,42 @@ class FitSubtaskConfig(AbstractConfig):
     fit_pars: FitPars = Field(default_factory=FitPars)
 
 
+@dataclass(frozen=True)
+class NoiseDefaults:
+    """Default values for the spectrum noise fitting and subtraction.
+    """
+    subtract: bool = False
+    nbins: int = 4
+    model: str = "Exponential"
+    freeze: dict[str, float] = Field(default_factory=lambda: {"scale": 0.039})
+
+
+class NoiseConfig(AbstractConfig):
+    """Configure the noise fitting and subtraction for the spectrum fitting task. If enabled, the
+    noise is fitted with the specified model and subtracted from the spectrum before fitting the
+    peaks. This configuration is used in the `fit_spec` task and the noise fitting and subtraction
+    is performed for each source file independently.
+
+    Attributes
+    ----------
+    subtract: bool, optional
+        Whether to perform the noise fitting and subtraction. Default is False.
+    nbins: int, optional
+        Number of bins to use for the noise fitting. By default, the first non-zero bin is set to
+        zero. Default is 4.
+    model: str, optional
+        The model to use for the noise fitting. It must be a model defined in aptapy.models.
+        Default is "Exponential".
+    freeze: dict[str, float], optional
+        A dictionary of the parameters to freeze during the noise fitting. Default is
+        {"scale": 0.039} for the Exponential model.
+    """
+    subtract: bool = NoiseDefaults.subtract
+    nbins: int = NoiseDefaults.nbins
+    model: str = NoiseDefaults.model
+    freeze: dict[str, float] = NoiseDefaults.freeze
+
+
 class FitSpecConfig(AbstractConfig):
     """Perform the spectrum fitting for each source file using the model and the fit parameters
     defined in the fitting subtasks.
@@ -118,18 +154,20 @@ class FitSpecConfig(AbstractConfig):
     ----------
     task: str
         Name of the task, to perform it must be 'fit_spec'.
-    subtasks: list[FitSubtask]
+    subtasks: list[FitSubtaskConfig]
         List of fitting subtasks to perform. Each subtask defines the model and the fit parameters
         to use for the fit.
     """
     task: Literal["fit_spec"]
     subtasks: list[FitSubtaskConfig]
+    noise: NoiseConfig = Field(default_factory=NoiseConfig)
 
     def __str__(self) -> str:
         out = f"{self.__class__.__name__}:\n"
         out += f"\ttask: {self.task}\n\n"
         for subtask in self.subtasks:
             out += f"\t{subtask}"
+        out += f"\t{self.noise}"
         return out
 
 
