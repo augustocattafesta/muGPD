@@ -1,6 +1,11 @@
 # **Release Notes**
 ----------------
 
+- New data added (260323) to characterize the noise.
+- Added new configuration `noise` in `fit_spec` to specify if and how to fit and subtract the noise in the low energy region of the spectra.
+- Pull requests merged and issues closed:
+    - [PR #63](https://github.com/augustocattafesta/muGPD/pull/63)
+    - [PR #64](https://github.com/augustocattafesta/muGPD/pull/64)
 
 ### Version 0.0.3 (2026-03-23)
 
