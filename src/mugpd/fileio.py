@@ -130,9 +130,8 @@ class SourceFile(FileBase):
     def date(self) -> datetime.date | str:
         """Date of the acquisition extracted from the start time.
         """
-        datetime = self.start_time
-        if datetime is not None:
-            return datetime.date()
+        if self.start_time is not None:
+            return self.start_time.date()
         return "Unknown"
 
 
