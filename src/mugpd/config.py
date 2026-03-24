@@ -123,11 +123,12 @@ class NoiseDefaults:
 class NoiseConfig(AbstractConfig):
     """Configure the noise fitting and subtraction for the spectrum fitting task. If enabled, the
     noise is fitted with the specified model and subtracted from the spectrum before fitting the
-    peaks. This configuration is used in the `fit_spec` task and the noise fitting and subtraction
-    is performed for each source file independently.
+    peaks.
 
     Attributes
     ----------
+    task: str
+        Name of the task, to perform it must be 'noise'.
     subtract: bool, optional
         Whether to perform the noise fitting and subtraction. Default is False.
     nbins: int, optional
@@ -140,6 +141,7 @@ class NoiseConfig(AbstractConfig):
         A dictionary of the parameters to freeze during the noise fitting. Default is
         {"scale": 0.039} for the Exponential model.
     """
+    task: Literal["noise"]
     subtract: bool = NoiseDefaults.subtract
     nbins: int = NoiseDefaults.nbins
     model: str = NoiseDefaults.model
@@ -160,14 +162,12 @@ class FitSpecConfig(AbstractConfig):
     """
     task: Literal["fit_spec"]
     subtasks: list[FitSubtaskConfig]
-    noise: NoiseConfig = Field(default_factory=NoiseConfig)
 
     def __str__(self) -> str:
         out = f"{self.__class__.__name__}:\n"
         out += f"\ttask: {self.task}\n\n"
         for subtask in self.subtasks:
             out += f"\t{subtask}"
-        out += f"\t{self.noise}"
         return out
 
 
@@ -232,6 +232,7 @@ class GainConfig(AbstractConfig):
     xaxis: str = TaskDefaults.xaxis
     subtasks: list[FitSubtaskConfig] | None = Field(default=None)
     show: bool = TaskDefaults.show
+
 
 class DriftConfig(AbstractConfig):
     """Perform the analysis of the gain as a function of drift voltage for each source file using
@@ -488,7 +489,7 @@ class StyleConfig(BaseModel):
 
 
 TaskType = CalibrationConfig | FitSpecConfig | GainConfig | ResolutionConfig | \
-    ResolutionEscapeConfig | PlotConfig | DriftConfig | CompareConfig
+    ResolutionEscapeConfig | PlotConfig | DriftConfig | CompareConfig | NoiseConfig
 
 
 class AppConfig(BaseModel):
@@ -561,6 +562,19 @@ class AppConfig(BaseModel):
             raise RuntimeError("No calibration task found in the pipeline. Make sure to specify a" \
             " calibration task.")
         return _config
+
+    @property
+    def noise(self) -> NoiseConfig | None:
+        """Extract the noise configuration from the pipeline configuration and return it. If no noise
+        task is found in the pipeline, None is returned.
+
+        Returns
+        -------
+        NoiseConfig | None
+            The noise task configuration extracted from the pipeline configuration, or None if no
+            noise task is found.
+        """
+        return next((t for t in self.pipeline if isinstance(t, NoiseConfig)), None)
 
     @property
     def fit_spec(self) -> FitSpecConfig | None:

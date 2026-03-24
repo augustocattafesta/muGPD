@@ -9,12 +9,12 @@ from .tasks import (
     calibration,
     compare,
     drift,
-    fit_noise,
-    fit_peak,
+    fit_spec,
     gain_task,
     plot_spectrum,
     resolution_escape,
     resolution_task,
+    subtract_noise,
 )
 
 TaskFunction = Callable[..., Context]
@@ -81,13 +81,16 @@ def _run_single(
     sources = [SourceFile(Path(p), calibration_model) for p in source_file_paths]
     # Run all fitting subtasks defined in the configuration file for each source file
     spec_fit_config = config.fit_spec
+    noise_config = config.noise
     for source in sources:
         log.info(f"Processing source file {source.file_path}")
         context.add_source(source)
+        if noise_config and noise_config.subtract:
+            context = subtract_noise(context, noise_config)
         if spec_fit_config is not None:
             # Execute all fitting subtasks defined in the configuration file
             for subtask in spec_fit_config.subtasks:
-                context = fit_peak(context=context, subtask=subtask)
+                context = fit_spec(context=context, subtask=subtask)
     log.info("All source files processed for current folder")
     # Now we run all the tasks defined in the configuration file. The pipeline is sorted
     # so that the plotting task is always executed at the end (to compute resolution or gain).
@@ -95,8 +98,8 @@ def _run_single(
     for task in pipeline:
         # Skip tasks already executed and those marked to be skipped
         # We skip plot here because we want all the results to be in the context
-        core_tasks = ["calibration", "spectrum_fitting"]
-        if task.task in core_tasks or getattr(task, "skip", False):
+        core_tasks = ["calibration", "fit_spec", "noise"]
+        if task.task in core_tasks:
             continue
         # Select the appropriate task function from the registry
         func = TASK_REGISTRY.get(task.task)

@@ -11,9 +11,9 @@ from ._logger import log
 from .config import (
     CompareConfig,
     DriftConfig,
-    FitNoiseConfig,
     FitSubtaskConfig,
     GainConfig,
+    NoiseConfig,
     PlotConfig,
     PlotStyleConfig,
     ResolutionConfig,
@@ -140,34 +140,30 @@ def calibration(context: Context) -> Context:
     return context
 
 
-def fit_peak(context: Context, subtask: FitSubtaskConfig) -> Context:
-    """Perform the fitting of a spectral emission line in the source data. If requested, the noise
-    can be fitted and subtracted from the spectrum before fitting the peak. 
+def subtract_noise(context: Context, noise_config: NoiseConfig) -> Context:
+    """Subtract the noise from the spectrum fitting with the model specified in the configuration
+    file. The noise model is fitted to the first bins of the spectrum and then is subtracted.
 
     Parameters
     ----------
     context : Context
         The context object containing the source data in `context.last_source` as an instance
         of the class SourceFile.
-    subtask : FitSubtaskConfig
-        The configuration of the fitting subtask, containing the target name, the model class and
-        the fit parameters.
+    noise_config : NoiseConfig
+        The noise configuration instance containing the parameters for the noise fitting and
+        subtraction.
     
     Returns
     -------
     context : Context
-        The updated context object containing the fit results.
+        The updated context object containing the noise-subtracted spectrum in `context.last_source.hist.
     """
-    # Access target, model and fit parameters
-    target = subtask.target
-    fit_pars = subtask.fit_pars
     # Access the last source data added to the context and get the histogram
     source = context.last_source
-    hist = source.hist
-    content = hist.content
-    bin_centers = hist.bin_centers()
-    noise_config = context.config.fit_spec.noise
-    if noise_config.subtract and source.noise_subtracted is False:
+    if source.noise_subtracted is False:
+        hist = source.hist
+        content = hist.content
+        bin_centers = hist.bin_centers()
         noise_model = load_class(noise_config.model)[0]()
         log.info(f"Subtracting noise from the spectrum fitting with {noise_model.name()} model")
         # Freeze the parameters of the noise model according to the configuration
@@ -187,7 +183,7 @@ def fit_peak(context: Context, subtask: FitSubtaskConfig) -> Context:
         # Set the content of the first bin to 0 because the MCA threshold lose some counts
         subtracted_content[idx[0]] = 0
         # Subtract the noise model from the bins with content > 0, starting from the second bin
-        subtracted_content[idx[1:]] -= noise_model(bin_centers[idx][1:noise_config.nbins + 1])
+        subtracted_content[idx[1:]] -= noise_model(bin_centers[idx[1:]])
         # Set any negative content to 0
         subtracted_content[subtracted_content < 0] = 0
         hist.set_content(subtracted_content)
@@ -195,8 +191,36 @@ def fit_peak(context: Context, subtask: FitSubtaskConfig) -> Context:
         # subtasks are defined in the configuration file
         source.noise_subtracted = True
         log.success("Noise subtraction completed")
-    # Load the model and fit the data
+    return context
+
+
+def _fit_peak(context: Context, subtask: FitSubtaskConfig) -> Context:
+    """Perform the fitting of a spectral emission line in the source data. If requested, the noise
+    can be fitted and subtracted from the spectrum before fitting the peak. 
+
+    Parameters
+    ----------
+    context : Context
+        The context object containing the source data in `context.last_source` as an instance
+        of the class SourceFile.
+    subtask : FitSubtaskConfig
+        The configuration of the fitting subtask, containing the target name, the model class and
+        the fit parameters.
+    
+    Returns
+    -------
+    context : Context
+        The updated context object containing the fit results.
+    """
+    # Access target
+    target = subtask.target
+    # Access the last source data added to the context and get the histogram
+    source = context.last_source
+    hist = source.hist
+    bin_centers = hist.bin_centers()
+    # Load the model and fit parameters
     model = load_class(subtask.model)[0]()
+    fit_pars = subtask.fit_pars
     log.info(f"Fitting target {target} with model {model.name()}")
     # Without a proper initialization of xmin and xmax the fit doesn't converge
     kwargs = fit_pars.model_dump()
@@ -228,6 +252,70 @@ def fit_peak(context: Context, subtask: FitSubtaskConfig) -> Context:
     # Save the target context in the main context
     context.add_target_ctx(source, target_ctx)
     return context
+
+
+def _fit_noise(context: Context, subtask: FitSubtaskConfig) -> Context:
+    """Perform the fitting of the noise in a source data containing only noise.
+
+    Parameters
+    ----------
+    context : Context
+        The context object containing the source data in `context.last_source` as an instance
+        of the class SourceFile.
+    subtask : FitSubtaskConfig
+        The configuration of the fitting subtask, containing the target name, the model class and
+        the fit parameters.
+    
+    Returns
+    -------
+    context : Context
+        The updated context object containing the fit results.
+    """
+    target = subtask.target
+    # Access the source data and get the histogram
+    source = context.last_source
+    hist = source.hist
+    content = hist.content
+    bin_centers = source.hist.bin_centers()
+    # Find the index of the bins with content > 0 and fit the noise model to those bins. We
+    # exclude the first bin because the MCA threshold lose some counts. thus is lower than the
+    # second bin.
+    idx = np.where(content > 0)[0]
+    x_noise = bin_centers[idx[1:]]
+    y_noise = content[idx[1:]]
+    # Load the model and fit parameters and then fit the data
+    model = load_class(subtask.model)[0]()
+    fit_pars = subtask.fit_pars.model_dump(exclude={"num_sigma_left", "num_sigma_right"})
+    model.fit(x_noise, y_noise, sigma=np.sqrt(y_noise), **fit_pars)
+    # Update the context with the fit results
+    target_ctx = TargetContext(target, None, None, None, model)
+    context.add_target_ctx(source, target_ctx)
+    return context
+
+
+def fit_spec(context: Context, subtask: FitSubtaskConfig) -> Context:
+    """Fit the spectrum of a source file with the model specified in the subtask configuration.
+    This function is a wrapper to dispatch the fitting to the appropriate fit function based on
+    the fit model type. In case the model is a Gaussian or a Fe55Forest, the fitting is performed
+    with the `_fit_peak` function, otherwise it is performed with the `_fit_noise` function.
+
+    Parameters
+    ----------
+    context : Context
+        The context object containing the source data in `context.last_source` as an instance
+        of the class SourceFile.
+    subtask : FitSubtaskConfig
+        The configuration of the fitting subtask, containing the target name, the model class and
+        the fit parameters.
+    
+    Returns
+    -------
+    context : Context
+        The updated context object containing the fit results.
+    """
+    if subtask.model in ["Gaussian", "Fe55Forest"]:
+        return _fit_peak(context, subtask)
+    return _fit_noise(context, subtask)        
 
 
 def gain_task(context: Context, task: GainConfig) -> Context:
@@ -630,9 +718,11 @@ def plot_spectrum(context: Context, task: PlotConfig) -> Context:
                 target_ctx = context.target_ctx(file_name, target)
                 model = target_ctx.model
                 model_label = get_label(task.task_labels, target_ctx)
+                if style["fit_output"] and model_label is None:
+                    model_label = f"{model.name()}"
                 # Save the model for automatic xrange calculation
                 models.append(model)
-                model.plot(label=model_label)
+                model.plot(label=model_label, fit_output=style["fit_output"])
         # Set the x-axis range
         plt.xlim(task.xrange)
         if task.xrange is None:
