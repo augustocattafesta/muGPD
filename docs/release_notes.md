@@ -7,12 +7,15 @@
 - Now a copy of the configuration file is saved to the output folder.
 - New standard configuration files added in */resources*.
 - Renamed some data folders.
+- Added webapp to show the analysis results with a GUI. 
 - Pull requests merged and issues closed:
+    - [PR #58](https://github.com/augustocattafesta/muGPD/pull/58)
     - [PR #63](https://github.com/augustocattafesta/muGPD/pull/63)
     - [PR #64](https://github.com/augustocattafesta/muGPD/pull/64)
     - [PR #66](https://github.com/augustocattafesta/muGPD/pull/66)
     - [PR #67](https://github.com/augustocattafesta/muGPD/pull/67)
-    - [PR #68](https://github.com/augustocattafesta/muGPD/pull/67)
+    - [PR #68](https://github.com/augustocattafesta/muGPD/pull/68)
+    - [Issue #56](https://github.com/augustocattafesta/muGPD/issues/56)
     - [Issue #65](https://github.com/augustocattafesta/muGPD/issues/65)
 
 ### Version 0.0.3 (2026-03-23)

@@ -22,6 +22,8 @@ dependencies = [
   "xraydb",
   "pyyaml",
   "pydantic",
+  "flask",
+  "pillow",
   ]
 
 # Optional dependencies are listed here, grouped into logical sections.
@@ -47,6 +49,7 @@ Issues = ""
 
 [project.scripts]
 mugpd = "mugpd.cli:main"
+mugpd-web = "mugpd.webapp:main"
 
 [tool.hatch.version]
 path = "src/mugpd/_version.py"

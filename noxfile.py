@@ -8,7 +8,8 @@ _DOCS_DIR_PATH = _ROOT_DIR_PATH / "docs"
 
 _LINT_DIRS = ("src", "tests")
 _TYPE_DIRS = ("src", "tests")
-_CACHE_DIRS = (".nox", ".ruff_cache", ".pylint_cache", ".pytest_cache")
+
+_CACHE_DIRS = (".nox", ".ruff_cache", ".pylint_cache", ".pytest_cache", ".mypy_cache")
 _DOCS_ARTIFACTS_DIRS = ("_build", "auto_examples")
 
 # Reuse existing virtualenvs by default.
