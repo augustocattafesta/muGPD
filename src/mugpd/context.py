@@ -214,7 +214,7 @@ class ContextBase:
         if isinstance(data, dict):
             out = {k: self.data_to_yaml(v) for k, v in data.items()}
         # If it is a fit model, extract relevant information
-        elif isinstance(data, modeling.AbstractFitModel):
+        elif isinstance(data, (modeling.AbstractFitModel, modeling.FitModelSum)):
             # Extract parameters and their values/errors
             pars_dict = {}
             for par in data:
