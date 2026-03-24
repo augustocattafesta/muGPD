@@ -41,7 +41,7 @@ Setting the `show` key to `true` for the `gain` and `resolution` tasks, the outp
 
 ## Noise spectrum fitting
 
-In this example, a folder containing only a source file and a calibration file is analyzed to characterize the noise spectrum. The configuration file is similar to the previous ones, with the exception of the models used in the fitting subtasks. When a model different from a Gaussian or a line forest is used, the tool fits all the spectrum ì, with the exception of the first bin with positive content (this is useful for this task because the first bin doesn't have all the statistics, due to the MCA threshold). The analysis is performed with the following configuration file.
+In this example, a folder containing only a source file and a calibration file is analyzed to characterize the noise spectrum. The configuration file is similar to the previous ones, with the exception of the models used in the fitting subtasks. When a model different from a Gaussian or a line forest is used, the tool fits all the spectrum, with the exception of the first bin with positive content (this is useful for this task because the first bin doesn't have all the statistics, due to the MCA threshold). The analysis is performed with the following configuration file.
 
 ```yaml
 --8<-- "docs/examples/noise_fit_config.yaml"

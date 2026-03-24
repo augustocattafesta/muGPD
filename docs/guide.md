@@ -102,7 +102,7 @@ pipeline:
 ```
 
 #### Noise subtraction
-This tasks allows to fit the noise at the beginning of the spectrum and to subtract it. It is possible to use any model from *aptapy*, and it is also possible to freeze some of the model parameters to increase the number of degrees of freedom.
+This tasks allows to fit the noise at the beginning of the spectrum and to subtract it. It is possible to use any model from *aptapy*, and it is also possible to freeze some of the model parameters to increase the number of degrees of freedom of the fit.
 
 ```yaml
  - task: noise

@@ -70,7 +70,8 @@ def get_xrange(source: SourceFile, models: list[AbstractFitModel]) -> list[float
     for model in models:
         if isinstance(model, aptapy.models.Exponential):
             low, high = model.plotting_range()
-        low, high = model.default_plotting_range()
+        else:
+            low, high = model.default_plotting_range()
         m_mins.append(low)
         m_maxs.append(high)
     # Determine the final xrange including all models. If no model is given, use the

@@ -197,8 +197,7 @@ def subtract_noise(context: Context, noise_config: NoiseConfig) -> Context:
 
 
 def _fit_peak(context: Context, subtask: FitSubtaskConfig) -> Context:
-    """Perform the fitting of a spectral emission line in the source data. If requested, the noise
-    can be fitted and subtracted from the spectrum before fitting the peak. 
+    """Perform the fitting of a spectral emission line in the source data.
 
     Parameters
     ----------

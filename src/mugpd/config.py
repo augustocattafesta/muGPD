@@ -117,7 +117,7 @@ class NoiseDefaults:
     subtract: bool = False
     nbins: int = 4
     model: str = "Exponential"
-    freeze: dict[str, float] = Field(default_factory=lambda: {})
+    freeze: dict[str, float] = Field(default_factory=dict)
 
 
 class NoiseConfig(AbstractConfig):
