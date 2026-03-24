@@ -179,6 +179,7 @@ def subtract_noise(context: Context, noise_config: NoiseConfig) -> Context:
         x_noise = bin_centers[idx][1:noise_config.nbins + 1]
         y_noise = content[idx][1:noise_config.nbins + 1]
         noise_model.fit(x_noise, y_noise, sigma=np.sqrt(y_noise))
+        log.info(f"Noise model parameters: {noise_model.parameter_values()}")
         # Subtract the noise model from the histogram
         subtracted_content = content.copy()
         # Set the content of the first bin to 0 because the MCA threshold lose some counts

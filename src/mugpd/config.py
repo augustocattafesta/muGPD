@@ -117,7 +117,7 @@ class NoiseDefaults:
     subtract: bool = False
     nbins: int = 4
     model: str = "Exponential"
-    freeze: dict[str, float] = Field(default_factory=lambda: {"scale": 0.039})
+    freeze: dict[str, float] = Field(default_factory=lambda: {})
 
 
 class NoiseConfig(AbstractConfig):
@@ -138,8 +138,8 @@ class NoiseConfig(AbstractConfig):
         The model to use for the noise fitting. It must be a model defined in aptapy.models.
         Default is "Exponential".
     freeze: dict[str, float], optional
-        A dictionary of the parameters to freeze during the noise fitting. Default is
-        {"scale": 0.039} for the Exponential model.
+        A dictionary of the parameters to freeze during the noise fitting. Default is {}, meaning
+        no parameters are frozen.
     """
     task: Literal["noise"]
     subtract: bool = NoiseDefaults.subtract
