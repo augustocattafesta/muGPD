@@ -1,35 +1,52 @@
-# master_thesis
+# μGPD Analysis tool
 
-## HTML browser alternative to Streamlit
+This package provides a CLI tool to analyze spectra from a *Microgap Gas Pixel Detectors* (μGPDs) and infer the characteristics of the detector, such as gain and energy resolution.
 
-This repository now includes a lightweight web UI based on Flask:
+## Installation
 
-- Entry point: `mugpd-web`
-- Compatibility module: `src/mugpd/webapp.py`
-- Refactored package: `src/mugpd/web/`
+To install and use the package, follow these steps:
 
-### Web package structure
-
-- `src/mugpd/web/app.py`: Flask routes and OOP renderer (`BrowserWebApp`)
-- `src/mugpd/web/logic.py`: pure helpers for formatting, sorting, table extraction, path safety
-- `src/mugpd/web/__init__.py`: package entry exports
-
-It is designed to be faster than Streamlit for browsing many figures by using:
-
-- Lazy image loading in the browser
-- Thumbnail caching on disk (`~/.cache/mugpd/thumbnails`)
-- Plain HTML tables for run and task data
-
-### Install web dependencies
+1. **Clone the repository**
 
 ```bash
-pip install .[web]
+git clone https://github.com/augustocattafesta/muGPD.git
 ```
 
-### Run the web app
+2. **Install the package**
+
+```bash
+cd muGPD
+pip install .
+```
+
+3. **Check if the installation is successfull**
+
+```bash
+mugpd --help
+```
+If no error is raised, the package has been correctly installed.
+
+## Use the analysis tool
+
+To analyze data from the detector, the command to run is:
+
+```bash
+mugpd config_path data_path
+```
+
+For more instructions on how to run an analysis, take a look at the [documentation](https://augustocattafesta.github.io/muGPD/).
+
+
+## Web User Interface
+
+The analysis tool includes a web UI to see the analysis results, with the possibility to filter between various properties of the detector. To launch the web UI, you have to run:
+
+```bash
+mugpd-web
+```
+
+The web app searches for analysis results in the default folder in the home directory. It is possible to indicate a different folder, as well as the host and the port where to run the app:
 
 ```bash
 mugpd-web --results "$HOME/results" --host 127.0.0.1 --port 7860
 ```
-
-Then open `http://127.0.0.1:7860` in your browser.
