@@ -1,0 +1,84 @@
+# This configuration file is useful to analyze a single file or a single folder.
+# The noise is not subtracted from the spectra, but it can be switched on changing
+# the subtract key. The fit of the main line in the spectrum is performed with a
+# Fe55Forest model and calculates the gain and the resolution with the fit results.
+# If multiple files are analyzed, gain and resolution curves are shown as functions
+# of the back voltage, and the gain is fitted using an exponential model. The spectral
+# fits are also shown.
+
+pipeline:
+  
+  # Calibrate the ADC counts with the calibration file
+  - task: calibration
+    show: false
+
+  # Decide whether to subtract the noise or not. In case, choose the model to use
+  - task: noise
+    subtract: false
+    model: Exponential
+    freeze: {}
+
+  # Fit the main line in the spectrum
+  - task: fit_spec
+  
+    subtasks:
+    - target: main
+      model: Fe55Forest
+
+  # Calculate the gain using the main line  
+  - task: gain
+    target: main
+    # Use the back voltage as xaxis value
+    xaxis: back
+    # Fit the gain curve with an exponential
+    subtasks:
+      - target: gain_fit
+        model: Exponential
+    show: true
+
+  # Calculate the resolution using the main line
+  - task: resolution
+    target: main
+    xaxis: back
+    show: true
+
+  # Plot the spectra
+  - task: plot
+    targets:
+      - main
+    # Show the results of these tasks in the legend
+    task_labels:
+      - resolution
+      - gain
+    # Rescale the plotting range to the left to show escape peak
+    xmin_factor: 0.5
+
+
+# Configure the style of the plots
+style:
+  tasks:
+    # Spectral plots style
+    plot:
+      xscale: linear
+      yscale: linear
+      title: $^{55}$Fe spectrum
+      label: Data
+      legend_label: Chip
+      legend_loc: upper right
+
+    gain:
+      marker: .
+      linestyle: "-"
+      color: black
+      label: Gain data
+      legend_label: $\mu$GPD
+      title: Gain analysis
+      yscale: log
+
+    resolution:
+      marker: .
+      color: black
+      label: Resolution data
+      legend_label: $\mu$GPD
+      title: Energy resolution analysis
+      annotate_min: true
