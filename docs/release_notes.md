@@ -1,7 +1,7 @@
 # **Release Notes**
 ----------------
 
-- New data added (260323) to characterize the noise.
+- New data added (23/03/2026) to characterize the noise.
 - Added a dispatch in the `fit_spec` task to handle both peak and other spectra fitting. This is useful to fit the noise spectrum in a file without source emission.
 - Added new task `noise` to specify if and how to fit and subtract the noise in the low energy region of the spectra.
 - Now a copy of the configuration file is saved to the output folder.

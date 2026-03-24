@@ -101,6 +101,18 @@ pipeline:
     show: false                 # Optional, plot the calibration results
 ```
 
+#### Noise subtraction
+This tasks allows to fit the noise at the beginning of the spectrum and to subtract it. It is possible to use any model from *aptapy*, and it is also possible to freeze some of the model parameters to increase the number of degrees of freedom.
+
+```yaml
+ - task: noise
+   subtract: true       # Default is false, thus no subtraction is performed
+   model: Exponential   # Optional, default is Exponential
+   freeze:
+      scale: 1.         # Optional, default is {}, thus no frozen parameters
+```
+
+
 #### Spectral fitting
 
 This task performs the spectral fitting on one or multiple emission lines at the same time. The task is divided into subtasks, each of them defined by the `target` (a name given to the subtask), and the `model` to use for the emission line fit (which must be *Gaussian* or *Fe55Forest*). These keys are mandatory for all the subtasks.

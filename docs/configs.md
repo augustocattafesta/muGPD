@@ -7,6 +7,8 @@ In this documentation there is a full explanation of all the tasks that can be e
 
 ::: src.mugpd.config.CalibrationConfig
 
+::: src.mugpd.config.NoiseConfig
+
 ::: src.mugpd.config.FitSpecConfig
 
 ::: src.mugpd.config.FitSubtaskConfig
