@@ -1,0 +1,34 @@
+# This configuration file is useful to fit the electronic noise spectrum at low
+# energy.
+
+pipeline:
+  # Execute the calibration
+  - task: calibration
+    show: false
+
+  # Perform the spectrum fit with differnt models
+  - task: fit_spec
+
+    subtasks:
+      # Fit the noise spectrum with an exponential model.
+      - target: noise_exp
+        model: Exponential
+
+      # Fit it with a power law model.
+      - target: noise_pl
+        model: PowerLaw
+
+  - task: plot
+    # Plot the noise spectrum with the fit results.
+    targets:
+      - noise_exp
+      - noise_pl
+
+# Configure the style of the plots
+style:
+    tasks:
+      plot:
+        # Show all the fit outputs to see the best-fit parameters.
+        fit_output: true
+        yscale: log
+        xscale: linear
