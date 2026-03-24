@@ -565,8 +565,8 @@ class AppConfig(BaseModel):
 
     @property
     def noise(self) -> NoiseConfig | None:
-        """Extract the noise configuration from the pipeline configuration and return it. If no noise
-        task is found in the pipeline, None is returned.
+        """Extract the noise configuration from the pipeline configuration and return it. If no
+        noise task is found in the pipeline, None is returned.
 
         Returns
         -------

@@ -156,7 +156,8 @@ def subtract_noise(context: Context, noise_config: NoiseConfig) -> Context:
     Returns
     -------
     context : Context
-        The updated context object containing the noise-subtracted spectrum in `context.last_source.hist.
+        The updated context object containing the noise-subtracted spectrum in
+        `context.last_source.hist`.
     """
     # Access the last source data added to the context and get the histogram
     source = context.last_source
@@ -288,7 +289,7 @@ def _fit_noise(context: Context, subtask: FitSubtaskConfig) -> Context:
     fit_pars = subtask.fit_pars.model_dump(exclude={"num_sigma_left", "num_sigma_right"})
     model.fit(x_noise, y_noise, sigma=np.sqrt(y_noise), **fit_pars)
     # Update the context with the fit results
-    target_ctx = TargetContext(target, None, None, None, model)
+    target_ctx = TargetContext(target, 0., 0., 0., model)
     context.add_target_ctx(source, target_ctx)
     return context
 
@@ -315,7 +316,7 @@ def fit_spec(context: Context, subtask: FitSubtaskConfig) -> Context:
     """
     if subtask.model in ["Gaussian", "Fe55Forest"]:
         return _fit_peak(context, subtask)
-    return _fit_noise(context, subtask)        
+    return _fit_noise(context, subtask)
 
 
 def gain_task(context: Context, task: GainConfig) -> Context:
