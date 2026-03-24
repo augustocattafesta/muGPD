@@ -110,6 +110,44 @@ class FitSubtaskConfig(AbstractConfig):
     fit_pars: FitPars = Field(default_factory=FitPars)
 
 
+@dataclass(frozen=True)
+class NoiseDefaults:
+    """Default values for the spectrum noise fitting and subtraction.
+    """
+    subtract: bool = False
+    nbins: int = 4
+    model: str = "Exponential"
+    freeze: dict[str, float] = Field(default_factory=dict)
+
+
+class NoiseConfig(AbstractConfig):
+    """Configure the noise fitting and subtraction for the spectrum fitting task. If enabled, the
+    noise is fitted with the specified model and subtracted from the spectrum before fitting the
+    peaks.
+
+    Attributes
+    ----------
+    task: str
+        Name of the task, to perform it must be 'noise'.
+    subtract: bool, optional
+        Whether to perform the noise fitting and subtraction. Default is False.
+    nbins: int, optional
+        Number of bins to use for the noise fitting. By default, the first non-zero bin is set to
+        zero. Default is 4.
+    model: str, optional
+        The model to use for the noise fitting. It must be a model defined in aptapy.models.
+        Default is "Exponential".
+    freeze: dict[str, float], optional
+        A dictionary of the parameters to freeze during the noise fitting. Default is {}, meaning
+        no parameters are frozen.
+    """
+    task: Literal["noise"]
+    subtract: bool = NoiseDefaults.subtract
+    nbins: int = NoiseDefaults.nbins
+    model: str = NoiseDefaults.model
+    freeze: dict[str, float] = NoiseDefaults.freeze
+
+
 class FitSpecConfig(AbstractConfig):
     """Perform the spectrum fitting for each source file using the model and the fit parameters
     defined in the fitting subtasks.
@@ -118,7 +156,7 @@ class FitSpecConfig(AbstractConfig):
     ----------
     task: str
         Name of the task, to perform it must be 'fit_spec'.
-    subtasks: list[FitSubtask]
+    subtasks: list[FitSubtaskConfig]
         List of fitting subtasks to perform. Each subtask defines the model and the fit parameters
         to use for the fit.
     """
@@ -194,6 +232,7 @@ class GainConfig(AbstractConfig):
     xaxis: str = TaskDefaults.xaxis
     subtasks: list[FitSubtaskConfig] | None = Field(default=None)
     show: bool = TaskDefaults.show
+
 
 class DriftConfig(AbstractConfig):
     """Perform the analysis of the gain as a function of drift voltage for each source file using
@@ -282,68 +321,38 @@ class CompareTaskDefaults:
     combine: list[str] = Field(default_factory=list)
 
 
-class CompareGainConfig(AbstractConfig):
-    """Compare the gain vs back voltage curves for multiple source folders. A gain task must be
-    performed before the compare gain task.
-
+class CompareConfig(AbstractConfig):
+    """Compare the specified quantity for multiple source folders. A task that calculates the
+    specified quantity must be performed.
+    
     Attributes
     ----------
     task: str
-        Name of the task, to perform it must be 'compare_gain'.
+        Name of the task, to perform it must be 'compare'.
+    quantity: str
+        The name of the quantity to compare. This must be the same as the target name of the
+        fitting subtask used for the calculation of the quantity.
     target: str
-        The target name of the fitting subtask to use for the gain calculation.
+        The target name of the fitting subtask to use for the calculation of the quantity.
+    xaxis: str, optional
+        The x-axis to use for the comparison plot. The choices are between 'back', 'drift',
+        'time' and 'pressure'. Default is 'back'.
     combine: list[str], optional
         List of folder names to combine in the same curve. If a folder name is not specified,
         another curve will be generated in the same plot. Default is an empty list, which means
         that no folders will be combined.
+    subtasks: list[FitSubtaskConfig] | None
+        Fitting subtask to perform on the combined data. If not specified, no fit will be performed
+        on the combined data. Default is None.
     show: bool, optional
-        Whether to generate and show the plot of the gain comparison. Default is True.
+        Whether to generate and show the plot of the comparison. Default is True.
     """
-    task: Literal["compare_gain"]
+    task: Literal["compare"]
+    quantity: str
     target: str
     xaxis: str = TaskDefaults.xaxis
     combine: list[str] = CompareTaskDefaults.combine
-    show: bool = TaskDefaults.show
-
-
-class CompareResolutionConfig(AbstractConfig):
-    """Compare the resolution vs back voltage curves for multiple source folders. A resolution task
-    must be performed before the compare resolution task.
-
-    Attributes
-    ----------
-    task: str
-        Name of the task, to perform it must be 'compare_resolution'.
-    target: str
-        The target name of the fitting subtask to use for the resolution calculation.
-    combine: list[str], optional
-        List of folder names to combine in the same curve. If a folder name is not specified,
-        another curve will be generated in the same plot. Default is an empty list, which means
-        that no folders will be combined.
-    show: bool, optional
-        Whether to generate and show the plot of the resolution comparison. Default is True.
-    """
-    task: Literal["compare_resolution"]
-    target: str
-    combine: list[str] = CompareTaskDefaults.combine
-    show: bool = TaskDefaults.show
-
-
-class CompareTrendConfig(AbstractConfig):
-    """Compare the gain trends as a function of time for multiple folders. A gain trend task must
-    be performed before the compare trend task.
-
-    Attributes
-    ----------
-    task: str
-        Name of the task, to perform it must be 'compare_trend'.
-    target: str
-        The target name of the fitting subtask to use for the gain trend calculation.
-    show: bool, optional
-        Whether to generate and show the plot of the gain trend comparison. Default is True.
-    """
-    task: Literal["compare_trend"]
-    target: str
+    subtasks: list[FitSubtaskConfig] | None = Field(default=None)
     show: bool = TaskDefaults.show
 
 
@@ -480,8 +489,7 @@ class StyleConfig(BaseModel):
 
 
 TaskType = CalibrationConfig | FitSpecConfig | GainConfig | ResolutionConfig | \
-    ResolutionEscapeConfig | PlotConfig | DriftConfig | CompareGainConfig | \
-    CompareResolutionConfig | CompareTrendConfig
+    ResolutionEscapeConfig | PlotConfig | DriftConfig | CompareConfig | NoiseConfig
 
 
 class AppConfig(BaseModel):
@@ -496,8 +504,6 @@ class AppConfig(BaseModel):
         Source acquisition parameters. Default values are defined in SourceConfig.
     style : StyleConfig, optional
         Style configuration for the plots. Default values are defined in StyleConfig.
-    acquisition : Acquisition, optional
-        Acquisition information to show in the plots. Default values are defined in Acquisition.
     """
     pipeline: list[TaskType]
     source: SourceConfig = Field(default_factory=SourceConfig)
@@ -556,6 +562,19 @@ class AppConfig(BaseModel):
             raise RuntimeError("No calibration task found in the pipeline. Make sure to specify a" \
             " calibration task.")
         return _config
+
+    @property
+    def noise(self) -> NoiseConfig | None:
+        """Extract the noise configuration from the pipeline configuration and return it. If no
+        noise task is found in the pipeline, None is returned.
+
+        Returns
+        -------
+        NoiseConfig | None
+            The noise task configuration extracted from the pipeline configuration, or None if no
+            noise task is found.
+        """
+        return next((t for t in self.pipeline if isinstance(t, NoiseConfig)), None)
 
     @property
     def fit_spec(self) -> FitSpecConfig | None:

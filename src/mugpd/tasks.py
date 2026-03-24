@@ -9,12 +9,11 @@ from uncertainties import unumpy
 
 from ._logger import log
 from .config import (
-    CompareGainConfig,
-    CompareResolutionConfig,
-    CompareTrendConfig,
+    CompareConfig,
     DriftConfig,
     FitSubtaskConfig,
     GainConfig,
+    NoiseConfig,
     PlotConfig,
     PlotStyleConfig,
     ResolutionConfig,
@@ -23,6 +22,7 @@ from .config import (
 from .context import Context, FoldersContext, TargetContext
 from .plotting import (
     XAXIS_LABELS,
+    YAXIS_LABELS,
     get_label,
     get_model_label,
     get_xrange,
@@ -39,6 +39,13 @@ from .utils import (
     find_peaks_iterative,
     gain,
     load_class,
+)
+
+XAXIS_DICT = dict(
+    back="voltages",
+    drift="drift_voltages",
+    pressure="pressures",
+    time="times"
 )
 
 
@@ -133,7 +140,63 @@ def calibration(context: Context) -> Context:
     return context
 
 
-def fit_peak(context: Context, subtask: FitSubtaskConfig) -> Context:
+def subtract_noise(context: Context, noise_config: NoiseConfig) -> Context:
+    """Subtract the noise from the spectrum fitting with the model specified in the configuration
+    file. The noise model is fitted to the first bins of the spectrum and then is subtracted.
+
+    Parameters
+    ----------
+    context : Context
+        The context object containing the source data in `context.last_source` as an instance
+        of the class SourceFile.
+    noise_config : NoiseConfig
+        The noise configuration instance containing the parameters for the noise fitting and
+        subtraction.
+    
+    Returns
+    -------
+    context : Context
+        The updated context object containing the noise-subtracted spectrum in
+        `context.last_source.hist`.
+    """
+    # Access the last source data added to the context and get the histogram
+    source = context.last_source
+    if source.noise_subtracted is False:
+        hist = source.hist
+        content = hist.content
+        bin_centers = hist.bin_centers()
+        noise_model = load_class(noise_config.model)[0]()
+        log.info(f"Subtracting noise from the spectrum fitting with {noise_model.name()} model")
+        # Freeze the parameters of the noise model according to the configuration
+        for param, value in noise_config.freeze.items():
+            attr = getattr(noise_model, param)
+            attr.freeze(value)
+            log.info(f"Freezing parameter {param} to value {value} in noise" \
+                      f" {noise_model.name()} model")
+        # Find the index of the bins with content > 0
+        idx = np.where(content > 0)[0]
+        # Fit the first n bins with an exponential
+        x_noise = bin_centers[idx][1:noise_config.nbins + 1]
+        y_noise = content[idx][1:noise_config.nbins + 1]
+        noise_model.fit(x_noise, y_noise, sigma=np.sqrt(y_noise))
+        log.info(f"Noise model parameters: {noise_model.parameter_values()}")
+        # Subtract the noise model from the histogram
+        subtracted_content = content.copy()
+        # Set the content of the first bin to 0 because the MCA threshold lose some counts
+        subtracted_content[idx[0]] = 0
+        # Subtract the noise model from the bins with content > 0, starting from the second bin
+        subtracted_content[idx[1:]] -= noise_model(bin_centers[idx[1:]])
+        # Set any negative content to 0
+        subtracted_content[subtracted_content < 0] = 0
+        hist.set_content(subtracted_content)
+        # Updating the source object to avoid multiple noise subtractions if multiple fitting
+        # subtasks are defined in the configuration file
+        source.noise_subtracted = True
+        log.success("Noise subtraction completed")
+    return context
+
+
+def _fit_peak(context: Context, subtask: FitSubtaskConfig) -> Context:
     """Perform the fitting of a spectral emission line in the source data.
 
     Parameters
@@ -150,17 +213,19 @@ def fit_peak(context: Context, subtask: FitSubtaskConfig) -> Context:
     context : Context
         The updated context object containing the fit results.
     """
-    # Access target, model and fit parameters
+    # Access target
     target = subtask.target
-    model = load_class(subtask.model)[0]()
-    log.info(f"Fitting target {target} with model {model.__class__.__name__}")
-    fit_pars = subtask.fit_pars
     # Access the last source data added to the context and get the histogram
     source = context.last_source
     hist = source.hist
+    bin_centers = hist.bin_centers()
+    # Load the model and fit parameters
+    model = load_class(subtask.model)[0]()
+    fit_pars = subtask.fit_pars
+    log.info(f"Fitting target {target} with model {model.name()}")
     # Without a proper initialization of xmin and xmax the fit doesn't converge
     kwargs = fit_pars.model_dump()
-    x_peak = hist.bin_centers()[hist.content > 0][5:][np.argmax(hist.content[hist.content > 0][5:])]
+    x_peak = bin_centers[hist.content > 0][5:][np.argmax(hist.content[hist.content > 0][5:])]
     if fit_pars.xmin == float("-inf") and fit_pars.xmax == float("inf"):
         kwargs["xmin"] = x_peak - 0.3 * np.sqrt(x_peak)
         kwargs["xmax"] = x_peak + 0.3 * np.sqrt(x_peak)
@@ -178,17 +243,80 @@ def fit_peak(context: Context, subtask: FitSubtaskConfig) -> Context:
         line_val = reference_energy / model.status.correlated_pars[1]
         sigma = model.status.correlated_pars[2]
     else:
-        raise TypeError(f"Model of type {type(model)} not supported in fit_peak task")
+        raise TypeError(f"Model of type {model.name()} not supported in fit_peak task")
     log.success(f"Fitting of target {target} completed")
     # Update the context with the fit results
     target_ctx = TargetContext(target, line_val, sigma, source.voltage, model)
     target_ctx.energy = context.config.source.energy
     # Add the fwhm to the target context
-    fwhm = SIGMA_TO_FWHM * sigma
-    target_ctx.fwhm_val = fwhm
+    target_ctx.fwhm_val = SIGMA_TO_FWHM * sigma
     # Save the target context in the main context
     context.add_target_ctx(source, target_ctx)
     return context
+
+
+def _fit_noise(context: Context, subtask: FitSubtaskConfig) -> Context:
+    """Perform the fitting of the noise in a source data containing only noise.
+
+    Parameters
+    ----------
+    context : Context
+        The context object containing the source data in `context.last_source` as an instance
+        of the class SourceFile.
+    subtask : FitSubtaskConfig
+        The configuration of the fitting subtask, containing the target name, the model class and
+        the fit parameters.
+    
+    Returns
+    -------
+    context : Context
+        The updated context object containing the fit results.
+    """
+    target = subtask.target
+    # Access the source data and get the histogram
+    source = context.last_source
+    hist = source.hist
+    content = hist.content
+    bin_centers = source.hist.bin_centers()
+    # Find the index of the bins with content > 0 and fit the noise model to those bins. We
+    # exclude the first bin because the MCA threshold lose some counts. thus is lower than the
+    # second bin.
+    idx = np.where(content > 0)[0]
+    x_noise = bin_centers[idx[1:]]
+    y_noise = content[idx[1:]]
+    # Load the model and fit parameters and then fit the data
+    model = load_class(subtask.model)[0]()
+    fit_pars = subtask.fit_pars.model_dump(exclude={"num_sigma_left", "num_sigma_right"})
+    model.fit(x_noise, y_noise, sigma=np.sqrt(y_noise), **fit_pars)
+    # Update the context with the fit results
+    target_ctx = TargetContext(target, 0., 0., 0., model)
+    context.add_target_ctx(source, target_ctx)
+    return context
+
+
+def fit_spec(context: Context, subtask: FitSubtaskConfig) -> Context:
+    """Fit the spectrum of a source file with the model specified in the subtask configuration.
+    This function is a wrapper to dispatch the fitting to the appropriate fit function based on
+    the fit model type. In case the model is a Gaussian or a Fe55Forest, the fitting is performed
+    with the `_fit_peak` function, otherwise it is performed with the `_fit_noise` function.
+
+    Parameters
+    ----------
+    context : Context
+        The context object containing the source data in `context.last_source` as an instance
+        of the class SourceFile.
+    subtask : FitSubtaskConfig
+        The configuration of the fitting subtask, containing the target name, the model class and
+        the fit parameters.
+    
+    Returns
+    -------
+    context : Context
+        The updated context object containing the fit results.
+    """
+    if subtask.model in ["Gaussian", "Fe55Forest"]:
+        return _fit_peak(context, subtask)
+    return _fit_noise(context, subtask)
 
 
 def gain_task(context: Context, task: GainConfig) -> Context:
@@ -277,164 +405,6 @@ def gain_task(context: Context, task: GainConfig) -> Context:
         time=times
     )
     fig = plot_task(xaxis_data[xaxis], gain_vals, *models, **plot_kwargs)
-    # Add the figure to the context
-    context.add_figure(name, fig)
-    return context
-
-
-def compare_gain(context: FoldersContext, task: CompareGainConfig) -> FoldersContext:
-    """Compare the gain of multiple folders vs voltage using the fit results obtained from the
-    source data.
-
-    Parameters
-    ---------
-    context : FoldersContext
-        The context object containing the fit results.
-    task : CompareGainConfig
-        The gain comparison configuration instance.
-    
-    Returns
-    -------
-    context : FoldersContext
-        The updated context object containing the gain comparison results.
-    """
-    # pylint: disable=too-many-statements
-    name = task.task
-    target = task.target
-    combine = task.combine
-    xaxis = task.xaxis
-    xaxis_data = dict(
-        back="voltages",
-        drift="drift_voltages",
-        pressure="pressures",
-        time="times"
-    )
-    folders_style = context.config.style.folders
-    # Get the different folder names
-    folder_names = context.folder_names
-    # Create empty arrays to store gain values and voltages
-    y = np.zeros(len(combine), dtype=object)
-    yerr = np.zeros(len(combine), dtype=object)
-    x = np.zeros(len(combine), dtype=object)
-    # Create the figure for the gain comparison
-    fig, ax = plt.subplots(num="gain_comparison")
-    # Iterate over all folders and plot the gain values
-    j = 0
-    for folder_name in folder_names:
-        folder_ctx = context.folder_ctx(folder_name)
-        folder_gain = folder_ctx.task_results("gain", target)
-        gain_vals = folder_gain["gain_vals"]
-        xdata = folder_gain[xaxis_data[xaxis]]
-        # If not aggregating, plot each folder separately
-        if folder_name not in combine:
-            style = folders_style.get(folder_name, PlotStyleConfig()).model_dump()
-            # Be careful because if the fit was performed with another xaxis quantity there might
-            # be a mismatch between the xdata and the model. We can try to fix this in the future.
-            model = None
-            models = [v['model'] for v in folder_gain.values()
-                      if isinstance(v, dict) and 'model' in v]
-            if models:
-                model = models[0]
-            plot_kwargs = dict(
-                model_label=get_model_label(name, model) if model else None,
-                **style)
-            plot_compare_task(ax, xdata, gain_vals, model, **plot_kwargs)
-        # If aggregating, store the data together for later fitting and plotting
-        else:
-            y[j] = unumpy.nominal_values(gain_vals)
-            yerr[j] = unumpy.std_devs(gain_vals)
-            x[j] = xdata
-            j += 1
-    if combine:
-        # Concatenate all data and fit with an exponential model
-        y = np.concatenate(y)
-        yerr = np.concatenate(yerr)
-        x = np.concatenate(x)
-        # Calculate the mean gain for each repeated voltage
-        x, y, yerr = average_repeats(x, y, yerr)
-        model = aptapy.models.Exponential()
-        model.fit(x, y, sigma=yerr, absolute_sigma=True)
-        # Plot the aggregated data and fit model
-        style = folders_style.get("combine", PlotStyleConfig()).model_dump()
-        plot_kwargs = dict(
-            model_label=get_model_label(name, model),
-            **style)
-        plot_compare_task(ax, x, unumpy.uarray(y, yerr), model, **plot_kwargs)
-        # Update the context with the fit results
-        context.add_task_results(name, target, dict(model=model))
-    # Define the task plot keyword arguments for style and labels
-    task_style = context.config.style.tasks.get(name, PlotStyleConfig()).model_dump()
-    # Set the title of the plot
-    if task_style["title"] is not None:
-        plt.title(task_style["title"])
-    # Set the labels and the axis scales
-    plt.xlabel(XAXIS_LABELS[xaxis])
-    plt.ylabel("Gain")
-    plt.xscale(task_style["xscale"])
-    plt.yscale(task_style["yscale"])
-    # Write the legend and show the plot
-    write_legend(task_style["legend_label"], loc=task_style["legend_loc"])
-    plt.tight_layout()
-    if not task.show:
-        plt.close(fig)
-    # Add the figure to the context
-    context.add_figure(name, fig)
-    return context
-
-
-def compare_trend(context: FoldersContext, task: CompareTrendConfig) -> FoldersContext:
-    """Compare the gain trend of multiple folders vs time using the fit results obtained from
-    the source data.
-
-    Parameters
-    ---------
-    context : FoldersContext
-        The context object containing the fit results.
-    task : CompareTrendConfig
-        The gain trend comparison configuration instance.
-    
-    Returns
-    -------
-    context : FoldersContext
-        The updated context object containing the gain trend comparison results.
-    """
-    # Access the task name and the target line
-    name = task.task
-    target = task.target
-    # Load the folder style configurations
-    folder_style = context.config.style.folders
-    # Get folder names
-    folder_names = context.folder_names
-    fig = plt.figure("trend_comparison")
-    # Iterate over all folders and load gain trend results
-    for folder_name in folder_names:
-        folder_ctx = context.folder_ctx(folder_name)
-        trend = folder_ctx.task_results("gain_trend", target)
-        times = trend.get("times", [])
-        g_val = unumpy.nominal_values(trend.get("gain_vals", []))
-        g_err = unumpy.std_devs(trend.get("gain_vals", []))
-        # Load the specific folder plot style
-        style = folder_style.get(folder_name, PlotStyleConfig()).model_dump(exclude_none=True)
-        # Plot the data
-        plt.errorbar(times, g_val, yerr=g_err,
-                     marker=style.get("marker", "."),
-                     color=style.get("color", None),
-                     ls="",
-                     label=style.get("label", folder_name))
-        for key, model_target in trend.items():
-            if key in ["times", "gain_vals"]:
-                continue
-            # Load the fit model and plot, if present
-            model = model_target.get("model", None)
-            if model:
-                model.plot(fit_output=True, plot_components=False,
-                           linestyle=style.get("linestyle", "-"),
-                           color=style.get("color", last_line_color()))
-    plt.xlabel("Time [hours]")
-    plt.ylabel("Gain")
-    # write_legend(label)
-    if not task.show:
-        plt.close(fig)
     # Add the figure to the context
     context.add_figure(name, fig)
     return context
@@ -569,68 +539,69 @@ def resolution_escape(context: Context, task: ResolutionEscapeConfig) -> Context
     return context
 
 
-def compare_resolution(context: FoldersContext, task: CompareResolutionConfig) -> FoldersContext:
-    """Compare the energy resolution of multiple folders vs voltage using the results obtained
-    from the resolution task.
-
-    Parameters
-    ----------
-    context : FoldersContext
-        The context object containing the resolution results.
-    task : CompareResolutionConfig
-        The resolution comparison configuration instance.
-    
-    Returns
-    -------
-    context : FoldersContext
-        The updated context object containing the resolution comparison results.
-    """
-    name = "compare_resolution"
-    target = task.target
+def compare(context: FoldersContext, task: CompareConfig) -> FoldersContext:
+    name = task.task
+    quantity = task.quantity
     combine = task.combine
-    folders_style = context.config.style.folders
-    # Get the different folder names
-    folder_names = context.folder_names
-    # Create the empty arrays to store resolution values and voltages
+    task_results = dict(
+        gain="gain_vals",
+        resolution="res_vals",
+        drift="drift_voltages",
+    )
+    plot_styles = context.config.style.folders
+    # Create empty arrays to store x and y values
     y = np.zeros(len(combine), dtype=object)
     yerr = np.zeros(len(combine), dtype=object)
     x = np.zeros(len(combine), dtype=object)
-    # Create the figure for the resolution comparison
-    fig, ax = plt.subplots(num="resolution_comparison")
-    # Iterate over all folders and plot the resolution values
-    j = 0
-    for folder_name in folder_names:
+    # Create the figure for the comparison
+    fig, ax = plt.subplots(num=f"{quantity}_comparison")
+    # Iterate over all folders and plot the quantity values
+    combine_index = 0
+    for folder_name in context.folder_names:
         folder_ctx = context.folder_ctx(folder_name)
-        folder_res = folder_ctx.task_results("resolution", target)
-        res_vals = folder_res.get("res_vals", [])
-        voltages = folder_res.get("voltages", [])
+        quantity_results = folder_ctx.task_results(quantity, task.target)
+        xdata = quantity_results[XAXIS_DICT[task.xaxis]]
+        ydata = quantity_results[task_results[quantity]]
         # If not aggregating, plot each folder separately
+        model = None
         if folder_name not in combine:
-            style = folders_style.get(folder_name, PlotStyleConfig()).model_dump()
-            plot_compare_task(ax, voltages, res_vals, None, **style)
+            folder_style = plot_styles.get(folder_name, PlotStyleConfig()).model_dump()
+            models = [v['model'] for v in quantity_results.values()
+                      if isinstance(v, dict) and 'model' in v]
+            if models:
+                model = models[0]
+            plot_kwargs = dict(
+                model_label=get_model_label(name, model) if model else None,
+                **folder_style)
+            plot_compare_task(ax, xdata, ydata, model, **plot_kwargs)
         # If aggregating, store the data together for later plotting
         else:
-            y[j] = unumpy.nominal_values(res_vals)
-            yerr[j] = unumpy.std_devs(res_vals)
-            x[j] = voltages
-            j += 1
+            y[combine_index] = unumpy.nominal_values(ydata)
+            yerr[combine_index] = unumpy.std_devs(ydata)
+            x[combine_index] = xdata
+            combine_index += 1
     if combine:
         # Concatenate all data
         y = np.concatenate(y)
         yerr = np.concatenate(yerr)
         x = np.concatenate(x)
         x, y, yerr = average_repeats(x, y, yerr)
-        # Plot the aggregated data
-        style = folders_style.get("combine", PlotStyleConfig()).model_dump()
-        plot_compare_task(ax, x, unumpy.uarray(y, yerr), None, **style)
+        if task.subtasks:
+            model = _fit_subtask(x, unumpy.uarray(y, yerr), task.subtasks[0])
+            model_label = get_model_label(name, model)
+        plot_kwargs = dict(
+            model_label=model_label if task.subtasks else None,
+            **plot_styles.get("combine", PlotStyleConfig()).model_dump())
+        plot_compare_task(ax, x, unumpy.uarray(y, yerr), model, **plot_kwargs)
     # Define the task plot keyword arguments for style and labels
-    task_style = context.config.style.tasks.get(name, PlotStyleConfig()).model_dump()
+    task_style = context.config.style.tasks.get(f"{name}_{quantity}",
+                                                PlotStyleConfig()).model_dump()
     # Set the title of the plot
     if task_style["title"] is not None:
         plt.title(task_style["title"])
     # Set the labels and the axis scales
-    plt.xlabel("Voltage [V]")
-    plt.ylabel(r"$\Delta$E/E")
+    plt.xlabel(XAXIS_LABELS[task.xaxis])
+    plt.ylabel(YAXIS_LABELS.get(quantity, quantity))
     plt.xscale(task_style["xscale"])
     plt.yscale(task_style["yscale"])
     # Write the legend and show the plot
@@ -639,7 +610,7 @@ def compare_resolution(context: FoldersContext, task: CompareResolutionConfig) -
     if not task.show:
         plt.close(fig)
     # Add the figure to the context
-    context.add_figure(name, fig)
+    context.add_figure(f"compare_{quantity}", fig)
     return context
 
 
@@ -748,9 +719,11 @@ def plot_spectrum(context: Context, task: PlotConfig) -> Context:
                 target_ctx = context.target_ctx(file_name, target)
                 model = target_ctx.model
                 model_label = get_label(task.task_labels, target_ctx)
+                if style["fit_output"] and model_label is None:
+                    model_label = f"{model.name()}"
                 # Save the model for automatic xrange calculation
                 models.append(model)
-                model.plot(label=model_label)
+                model.plot(label=model_label, fit_output=style["fit_output"])
         # Set the x-axis range
         plt.xlim(task.xrange)
         if task.xrange is None:
@@ -764,6 +737,8 @@ def plot_spectrum(context: Context, task: PlotConfig) -> Context:
         # Add the figure to the context
         context.add_figure(file_name, fig)
         plt.tight_layout()
+        plt.xscale(style["xscale"])
+        plt.yscale(style["yscale"])
         if not task.show:
             plt.close(fig)
     return context

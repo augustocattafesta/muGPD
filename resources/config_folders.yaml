@@ -1,35 +1,50 @@
+# This configuration file is useful to perform an analysis of multiple folders
+# at the same time and compare the results. 
+
 pipeline:
   # Execute the calibration
   - task: calibration
     show: false
 
+  # Decide whether to subtract the electronic noise at the beginning of the spectrum.
+  # In case, use an exponential model to fit it and subtract it.
+  - task: noise
+    subtract: false
+    model: Exponential
+    freeze: {}
+
+  # Fit the main line in the source spectra
   - task: fit_spec
+
     subtasks:
       - target: main
         model: Fe55Forest
 
-  # Estimate the gain from the main line  
+  # Calculate the gain using the main line
   - task: gain
     target: main
+    # Use the back 
     xaxis: back
     subtasks:
       - target: gain_fit
         model: Exponential
+    show: false
 
   # Estimate the resolution from the main line
   - task: resolution
     target: main
+    xaxis: back
+    show: false
 
-
-  # Execute the task to combine the gain results from two folders and fit the
-  # data with a single exponential model
+  # Compare the results from different folders
   - task: compare
     quantity: gain
     target: main
     xaxis: back
-    combine:                                     # Combine the data
-      - folder
-      - folder1
+    # Combine the data
+    # combine:
+    #   - folder0
+    #   - folder1
     # Perform a fit on the combined data
     subtasks:
       - target: combine_fit
@@ -41,8 +56,26 @@ pipeline:
     quantity: resolution
     xaxis: back
     target: main
+    # Combine the data
+    # combine:
+    #   - folder0
+    #   - folder1
 
-# Define the styles for comparison plots
+
+  # Plot the spectra for debugging
+  - task: plot
+    targets:
+      - main
+    # Show the results of these tasks in the legend
+    task_labels:
+      - resolution
+      - gain
+    # Rescale the plotting range to the left to show escape peak
+    xmin_factor: 0.5
+    show: false
+
+
+# Configure the style of the plots
 style:
   # Set the labels for gain and resolution comparison plot
   tasks:
@@ -56,15 +89,15 @@ style:
       legend_label: $\mu$GPD
 
   folders:
-    # Set combined data style (only for gain)
+    # Set combined data style
     combine:
       label: Combined data
       marker: .
       color: black
       linestyle: "--"
     
-    # Set folder data style (for resolution)
-    folder:
+    # Set folder data style
+    folder0:
       label: Folder 0 data
       marker: x
       color: black

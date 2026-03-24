@@ -39,6 +39,7 @@ class SourceFile(FileBase):
     def __init__(self, file_path: Path,
                  charge_conv_model: aptapy.modeling.AbstractFitModel | None = None) -> None:
         super().__init__(file_path)
+        self.noise_subtracted = False
         if charge_conv_model is not None:
             content = self.hist.content
             # Apply charge conversion to the bin edges
@@ -126,7 +127,7 @@ class SourceFile(FileBase):
         return "Unknown"
 
     @property
-    def date(self) -> datetime.datetime.date:
+    def date(self) -> datetime.date | str:
         """Date of the acquisition extracted from the file name.
         """
         match = match = re.search(r"_(\d{6}|\d{8})_", f"_{self.file_path.name}_")
@@ -183,7 +184,9 @@ class Folder:
         to the index {i}, otherwise it's done alphabetically.
         """
         # Keep files containing _B<number>
-        filtered = [_f for _f in self.input_files if re.search(r"B\d+", _f.name)]
+        filtered_sources = [_f for _f in self.input_files if re.search(r"B\d+", _f.name)]
+        noise_sources = [_f for _f in self.input_files if "noise" in _f.name.lower()
+                         and _f not in filtered_sources]
 
         def numeric_sort_key(p: Path):
             """Sort the files with numerical order.
@@ -191,7 +194,7 @@ class Folder:
             numbers = [int(x) for x in re.findall(r"\d+", p.stem)]
             return numbers[-1]  # sort by the last number
 
-        return sorted(filtered, key=numeric_sort_key)
+        return sorted(filtered_sources, key=numeric_sort_key) + sorted(noise_sources)
 
     @property
     def pulse_file(self) -> Path:

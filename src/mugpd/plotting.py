@@ -17,6 +17,13 @@ XAXIS_LABELS = dict(
 )
 
 
+YAXIS_LABELS = {
+        "gain": "Gain",
+        "resolution": r"$\Delta$E/E",
+        "drift": "Drift Voltage [V]",
+    }
+
+
 def write_legend(label: str | None, *axs: plt.Axes | None, loc: str = "best" ) -> None:
     # pylint: disable=protected-access
     valid_axs: list[plt.Axes] = [ax for ax in axs if ax is not None]
@@ -61,7 +68,10 @@ def get_xrange(source: SourceFile, models: list[AbstractFitModel]) -> list[float
     m_maxs = []
     # Get the plotting range of all models, if any
     for model in models:
-        low, high = model.default_plotting_range()
+        if isinstance(model, aptapy.models.Exponential):
+            low, high = model.plotting_range()
+        else:
+            low, high = model.default_plotting_range()
         m_mins.append(low)
         m_maxs.append(high)
     # Determine the final xrange including all models. If no model is given, use the
@@ -112,7 +122,7 @@ def get_model_label(task: str, model: AbstractFitModel) -> str:
         The fitted model for which to generate the label.
     """
     # If gain task, return the scale parameter of the exponential
-    if task in ("gain", "compare_gain"):
+    if task in ("gain", "compare_gain", "compare"):
         if isinstance(model, aptapy.models.Exponential):
             return f"Scale: {-model.scale.ufloat()} V"
         return model.name()
@@ -167,12 +177,11 @@ def plot_task(xdata: np.ndarray, ydata: np.ndarray, *models: AbstractFitModel,
         model_label = kwargs.get(f"model{i}_label")
         fit_output = kwargs.get("fit_output", False)
         if isinstance(model, FitModelSum):
-            plot_components = False
             model.plot(fit_output=fit_output,
                        label=model_label,
                        linestyle=kwargs["linestyle"],
                        color=last_line_color(),
-                       plot_components=plot_components)
+                       plot_components=False)
         else:
             model.plot(fit_output=fit_output,
                        label=model_label,
@@ -240,6 +249,15 @@ def plot_compare_task(ax: plt.Axes, xdata: np.ndarray, ydata: np.ndarray,
     # Plot the model if provided
     if model:
         model_label = kwargs.get("model_label")
-        model.plot(label=model_label,
-                   linestyle=kwargs["linestyle"],
-                   color=last_line_color())
+        fit_output = kwargs.get("fit_output", False)
+        if isinstance(model, FitModelSum):
+            model.plot(fit_output=fit_output,
+                       label=model_label,
+                       linestyle=kwargs["linestyle"],
+                       color=last_line_color(),
+                       plot_components=False)
+        else:
+            model.plot(fit_output=fit_output,
+                    label=model_label,
+                    linestyle=kwargs["linestyle"],
+                    color=last_line_color())

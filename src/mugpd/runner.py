@@ -7,33 +7,30 @@ from .context import Context, FoldersContext
 from .fileio import Folder, PulsatorFile, SourceFile, check_source_paths
 from .tasks import (
     calibration,
-    compare_gain,
-    compare_resolution,
-    compare_trend,
+    compare,
     drift,
-    fit_peak,
+    fit_spec,
     gain_task,
     plot_spectrum,
     resolution_escape,
     resolution_task,
+    subtract_noise,
 )
 
 TaskFunction = Callable[..., Context]
 TaskFunctionFolders = Callable[..., FoldersContext]
 
 TASK_REGISTRY: dict[str, TaskFunction] = {
+    "drift": drift,
     "gain": gain_task,
+    "plot": plot_spectrum,
     "resolution": resolution_task,
     "resolution_escape": resolution_escape,
-    "drift": drift,
-    "plot": plot_spectrum,
 }
 
 
 FOLDERS_TASK_REGISTRY: dict[str, TaskFunctionFolders] = {
-    "compare_gain": compare_gain,
-    "compare_resolution": compare_resolution,
-    "compare_trend": compare_trend,
+    "compare": compare,
 }
 
 
@@ -84,13 +81,16 @@ def _run_single(
     sources = [SourceFile(Path(p), calibration_model) for p in source_file_paths]
     # Run all fitting subtasks defined in the configuration file for each source file
     spec_fit_config = config.fit_spec
+    noise_config = config.noise
     for source in sources:
         log.info(f"Processing source file {source.file_path}")
         context.add_source(source)
+        if noise_config and noise_config.subtract:
+            context = subtract_noise(context, noise_config)
         if spec_fit_config is not None:
             # Execute all fitting subtasks defined in the configuration file
             for subtask in spec_fit_config.subtasks:
-                context = fit_peak(context=context, subtask=subtask)
+                context = fit_spec(context=context, subtask=subtask)
     log.info("All source files processed for current folder")
     # Now we run all the tasks defined in the configuration file. The pipeline is sorted
     # so that the plotting task is always executed at the end (to compute resolution or gain).
@@ -98,8 +98,8 @@ def _run_single(
     for task in pipeline:
         # Skip tasks already executed and those marked to be skipped
         # We skip plot here because we want all the results to be in the context
-        core_tasks = ["calibration", "spectrum_fitting"]
-        if task.task in core_tasks or getattr(task, "skip", False):
+        core_tasks = ["calibration", "fit_spec", "noise"]
+        if task.task in core_tasks:
             continue
         # Select the appropriate task function from the registry
         func = TASK_REGISTRY.get(task.task)
@@ -183,18 +183,16 @@ def run(config_file_path: str | Path,
     file_paths, path_type = check_source_paths(paths)
     input_paths = [str(Path(p)) for p in paths]
     config_path = str(Path(config_file_path).absolute())
+    context: Context | FoldersContext
     if path_type == "file":
         log.info("Running analysis on single files")
         context = _run_single(config, *file_paths)
-        context.set_run_meta(config_path=config_path,
-                             input_paths=input_paths,
-                             path_type=path_type)
-        return context
-    if path_type == "folder":
+    elif path_type == "folder":
         log.info("Running analysis on folder(s)")
         context = _run_folders(config, *file_paths)
-        context.set_run_meta(config_path=config_path,
+    else:
+        raise ValueError("Invalid path type. Paths must be either all files or all folders.")
+    context.update_run_metadata(config_path=config_path,
                              input_paths=input_paths,
                              path_type=path_type)
-        return context
-    raise ValueError("Invalid path type. Paths must be either all files or all folders.")
+    return context

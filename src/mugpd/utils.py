@@ -5,6 +5,7 @@ signal.
 import importlib
 
 import aptapy
+import aptapy.modeling
 import aptapy.models
 import numpy as np
 import scipy.signal

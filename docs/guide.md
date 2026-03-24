@@ -1,13 +1,13 @@
 # **Analysis and configuration guide**
 
-## Run the analysis
+## Running μGPD analysis tool
 
-After the installation, the CLI can be used with the command:
+After the installation, the analysis tool can be launched from terminal with the command:
 ```bash
 mugpd config paths
 ```
 
-To run the analysis, the requested arguments are the .yaml configuration file path and the data files or folders paths. The .yaml configuration file path is always the first argument.
+The first positional argument is the .yaml configuration file path. The second argument accepts multiple paths to the data files or folders to analyze.
 
 To analyze one or more source files, the command needs a sequence of source file paths and a calibration with pulsed data as the last argument. This is an example of the analysis of two source files using the same calibration file:
 
@@ -66,26 +66,6 @@ The configuration file is a .yaml file which contains all the information to run
 
 **Warning:**  when a key is optional and you want to set it to the default value, all the line must be deleted, not only the value, otherwise a type error can be raised or a `None` value can be assigned to the key.
 
-<!-- ### Acquisition
-
-The acquisition dictionary stores information about the acquisition, such as the date of the acquisition, the name and type of the chip and other detector and source properties. These properties are stored as keys of the dictionary, and a value is assigned to each of them. 
-
-The acquisition dictionary is optional and none of its field is mandatory
-
-**Note:** currently these info are not being used for any purpose, but in the future they can be useful for some tasks.
-
-```yaml
-acquisition:
-  date: 2026-01-01
-  chip: W1a
-  structure: 86.6 um
-  gas: Ar
-  w: 26.
-  element: Fe55
-  e_peak: 5.9
-```
- -->
-
 ### Source
 
 The source dictionary allows to set the properties of the source, such as the energy of the main emission line, and also the detector constants, such as the W-value of the gas.
@@ -121,6 +101,18 @@ pipeline:
     show: false                 # Optional, plot the calibration results
 ```
 
+#### Noise subtraction
+This tasks allows to fit the noise at the beginning of the spectrum and to subtract it. It is possible to use any model from *aptapy*, and it is also possible to freeze some of the model parameters to increase the number of degrees of freedom of the fit.
+
+```yaml
+ - task: noise
+   subtract: true       # Default is false, thus no subtraction is performed
+   model: Exponential   # Optional, default is Exponential
+   freeze:
+      scale: 1.         # Optional, default is {}, thus no frozen parameters
+```
+
+
 #### Spectral fitting
 
 This task performs the spectral fitting on one or multiple emission lines at the same time. The task is divided into subtasks, each of them defined by the `target` (a name given to the subtask), and the `model` to use for the emission line fit (which must be *Gaussian* or *Fe55Forest*). These keys are mandatory for all the subtasks.
@@ -148,51 +140,18 @@ A subtask also has another optional key, which is `fit_pars`, that allows to spe
 
 This task performs the estimate of the gain using the spectral fitting results of a given `target`, previously specified during the *fit_spec* task.
 
-If the analysis is performed on a single file, there are no other keys to specify. If the analysis is performed on multiple files or on one or multiple folders, the `fit` and `plot` can be specified. 
+If the analysis is performed on a single file, there are no other keys to specify. If it is performed on multiple files it is possible to fit the data writing a fitting subtask.
 
-**Note:** no error is raised if these optional keys are specified during the analysis of a single file, but no fit will be performed and no plot will be shown.
 
 ```yaml
   - task: gain
     target: main_peak
-    fit: true            # Optional, fit the data with an exponential model
-    show: true           # Optional, plot gain vs back voltage
+    xaxis: back             # Optional, the quantity to put on xaxis
+    subtasks:               # Optional, fitting substask with Exponential model
+      - target: fit_gain    # Name of the fitting subtask
+        model: Exponential
+    show: true              # Optional, plot gain vs xaxis
 ```
-
-#### Gain trend with time
-
-This task performs the study of the gain as a function of time. The gain is estimated in the same way as the *gain* task. For each source file, the time and the length of the acquisition are extracted from the header. The time info are combined together to get the variation of the gain with time.
-
-The gain trend can also be analyzed using fitting subtasks, which allow to fit the data with a model or a composition of models from *aptapy.models*. These subtasks share the same syntax of the spectral fitting subtasks.
-
-If more than one trend is visible in the same data, multiple targets can be specified, and the fit range can be adjusted to each trend.
-
-```yaml
-  - task: gain_trend
-    target: main_peak
-    subtasks:                         # Optional, fitting subtasks
-      target: trend                   
-      model: Exponential + Constant   # Composition of models 
-```
-
-#### Gain compare between folders
-
-This task allows to compare the gain results of two or more different folders on the same plot. To execute this task, it is required that at least a `gain` task has been completed on a given `target` emission line.
-
-It is also possible to combine the gain estimates from a list of folders specified in the `combine` key, and also perform a single exponential fit on the data from these folders.
-
-If there are multiple data taken at a given voltage, the mean of the gain estimated from these files is calculated.
-
-```yaml
-  - task: compare_gain
-    target: main_peak
-    combine:                     # Optional, combine the data of the specified folders
-      - folder0
-      - folder1
-```
-
-
-#### Drift varying
 
 
 #### Resolution estimate
@@ -227,18 +186,23 @@ The `show` and `fit` keys can be specified if working on multiple files.
     target_escape: escape_peak
 ```
 
-#### Resolution compare between folders
+#### Compare gain and resolution between folders
 
-This task allows to compare the energy resolution between different folders. As for `compare_gain` task, you need first to perform a `resolution` task on a `target` to compare the results. 
+This task allows to compare the results of gain and resolution obtained from different folders and show them on the same plot. To execute this task, it is required that at least a `gain` or `resolution` task has been performed.
 
-You can combine the results of different folders by specifying a list with the names of folders to combine in the `combine` key.
+It is also possible to combine the results of some folders into a single dataset. If the combined results have to be fitted with a given model, it is possible to perform a fitting subtask specifying it with the `subtasks` key. The syntax is the same as the previous tasks.
 
 ```yaml
-  - task: compare_resolution
+  - task: compare
+    quantity: gain               # Specify the quantity to compare (gain or resolution)
     target: main_peak
-    combine:      # Optional, combine the results from the specified folders
+    xaxis: back                  # Optional, quantity to put on xaxis
+    combine:                     # Optional, combine the data of the specified folders
       - folder0
       - folder1
+    subtasks:                    # Optional, fit the combined data
+      - target: combine_fit
+        model: Exponential
 ```
 
 #### Plot the spectrum
