@@ -6,8 +6,8 @@ import streamlit as st
 from uncertainties import ufloat
 
 try:
-    from analysis import ANALYSIS_RESULTS
-    from analysis.fileio import AnalysisIndex, AnalysisRun
+    from mugpd import ANALYSIS_RESULTS
+    from mugpd.fileio import AnalysisIndex, AnalysisRun
 except ImportError:
     from . import ANALYSIS_RESULTS
     from .fileio import AnalysisIndex, AnalysisRun

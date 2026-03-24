@@ -40,6 +40,10 @@ docs = [
     "mkdocs-material",
     "mkdocstrings-python",
   ]
+web = [
+    "flask",
+    "pillow",
+  ]
 
 [project.urls]
 Homepage = ""
@@ -47,6 +51,7 @@ Issues = ""
 
 [project.scripts]
 mugpd = "mugpd.cli:main"
+mugpd-web = "mugpd.webapp:main"
 
 [tool.hatch.version]
 path = "src/mugpd/_version.py"
