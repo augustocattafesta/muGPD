@@ -12,6 +12,7 @@
     - [PR #64](https://github.com/augustocattafesta/muGPD/pull/64)
     - [PR #66](https://github.com/augustocattafesta/muGPD/pull/66)
     - [PR #67](https://github.com/augustocattafesta/muGPD/pull/67)
+    - [PR #68](https://github.com/augustocattafesta/muGPD/pull/67)
     - [Issue #65](https://github.com/augustocattafesta/muGPD/issues/65)
 
 ### Version 0.0.3 (2026-03-23)
