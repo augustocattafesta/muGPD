@@ -738,6 +738,8 @@ def plot_spectrum(context: Context, task: PlotConfig) -> Context:
         # Add the figure to the context
         context.add_figure(file_name, fig)
         plt.tight_layout()
+        plt.xscale(style["xscale"])
+        plt.yscale(style["yscale"])
         if not task.show:
             plt.close(fig)
     return context
