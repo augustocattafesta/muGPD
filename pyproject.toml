@@ -22,6 +22,8 @@ dependencies = [
   "xraydb",
   "pyyaml",
   "pydantic",
+  "flask",
+  "pillow",
   ]
 
 # Optional dependencies are listed here, grouped into logical sections.
@@ -39,10 +41,6 @@ dev = [
 docs = [
     "mkdocs-material",
     "mkdocstrings-python",
-  ]
-web = [
-    "flask",
-    "pillow",
   ]
 
 [project.urls]

@@ -5,7 +5,14 @@
 This repository now includes a lightweight web UI based on Flask:
 
 - Entry point: `mugpd-web`
-- Module: `src/mugpd/webapp.py`
+- Compatibility module: `src/mugpd/webapp.py`
+- Refactored package: `src/mugpd/web/`
+
+### Web package structure
+
+- `src/mugpd/web/app.py`: Flask routes and OOP renderer (`BrowserWebApp`)
+- `src/mugpd/web/logic.py`: pure helpers for formatting, sorting, table extraction, path safety
+- `src/mugpd/web/__init__.py`: package entry exports
 
 It is designed to be faster than Streamlit for browsing many figures by using:
 

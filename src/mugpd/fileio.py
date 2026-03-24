@@ -448,9 +448,8 @@ class AnalysisIndex:
     @staticmethod
     def records_to_rows(records: Iterable[AnalysisRecord]) -> list[dict[str, Any]]:
         """Convert records into table-friendly dictionaries for UI."""
-        rows: list[dict[str, Any]] = []
-        for r in records:
-            rows.append({
+        return [
+            {
                 "run_id": r.run_id,
                 "mode": r.mode,
                 "created_at": r.created_at,
@@ -459,5 +458,6 @@ class AnalysisIndex:
                 "structures": ", ".join(r.structures),
                 "manifest_path": str(r.manifest_path),
                 "run_directory": str(r.run_directory),
-            })
-        return rows
+            }
+            for r in records
+        ]
