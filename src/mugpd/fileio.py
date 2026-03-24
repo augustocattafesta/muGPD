@@ -126,15 +126,11 @@ class SourceFile(FileBase):
 
     @property
     def date(self) -> datetime.date | str:
-        """Date of the acquisition extracted from the file name.
+        """Date of the acquisition extracted from the start time.
         """
-        match = match = re.search(r"_(\d{6}|\d{8})_", f"_{self.file_path.name}_")
-        if match is not None:
-            date_str = match.group(1)
-            if len(date_str) == 6:
-                return datetime.datetime.strptime(date_str, "%d%m%y").date()
-            if len(date_str) == 8:
-                return datetime.datetime.strptime(date_str, "%d%m%Y").date()
+        datetime = self.start_time
+        if datetime is not None:
+            return datetime.date()
         return "Unknown"
 
 
