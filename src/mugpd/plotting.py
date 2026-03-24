@@ -68,6 +68,8 @@ def get_xrange(source: SourceFile, models: list[AbstractFitModel]) -> list[float
     m_maxs = []
     # Get the plotting range of all models, if any
     for model in models:
+        if isinstance(model, aptapy.models.Exponential):
+            low, high = model.plotting_range()
         low, high = model.default_plotting_range()
         m_mins.append(low)
         m_maxs.append(high)

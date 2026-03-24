@@ -14,6 +14,12 @@ context = run(single_config_file_path, source_file_path, calibration_file_path)
 single_example_fig = context._figures["source_w1a_D1000B340"]
 single_example_fig.savefig(FIGURES_PATH / "single_example.png")
 
+noise_folder_path = EXAMPLES_PATH / "data/noise"
+noise_config_file_path = EXAMPLES_PATH / "noise_fit_config.yaml"
+context = run(noise_config_file_path, noise_folder_path)
+noise_fit_fig = context.folder_ctx("noise")._figures["live_data_w1b_2D_230326_P1300_D1000_noise"]
+noise_fit_fig.savefig(FIGURES_PATH / "noise_fit.png")
+
 folder_path = EXAMPLES_PATH / "data/folder"
 folder_config_path = EXAMPLES_PATH / "folder_example_config.yaml"
 context = run(folder_config_path, folder_path)

@@ -296,6 +296,12 @@ class ContextBase:
             yaml.safe_dump(self.data_to_yaml(run_manifest), f,
                            sort_keys=False, default_flow_style=False)
 
+    def _write_config_snapshot(self, folder_dir: Path) -> Path:
+        """Write a reusable copy of the in-memory AppConfig used for this run."""
+        config_snapshot_path = folder_dir / "config.yaml"
+        self.config.to_yaml(config_snapshot_path)
+        return config_snapshot_path
+
     def save(self, output_dir: Path, fig_format: str) -> None:
         """Save the context configuration, figures, and results to the specified output
         directory.
@@ -310,6 +316,8 @@ class ContextBase:
         log.info("Saving analysis results")
         folder_dir = self._output_dir(output_dir)
         folder_dir.mkdir(parents=True, exist_ok=True)
+        log.info("Saving configuration snapshot")
+        self._write_config_snapshot(folder_dir)
         log.info("Saving figures")
         figures_results_entries = self._save_figures(folder_dir, fig_format)
         log.info("Building analysis results file and saving to disk")

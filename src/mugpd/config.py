@@ -110,6 +110,44 @@ class FitSubtaskConfig(AbstractConfig):
     fit_pars: FitPars = Field(default_factory=FitPars)
 
 
+@dataclass(frozen=True)
+class NoiseDefaults:
+    """Default values for the spectrum noise fitting and subtraction.
+    """
+    subtract: bool = False
+    nbins: int = 4
+    model: str = "Exponential"
+    freeze: dict[str, float] = Field(default_factory=lambda: {})
+
+
+class NoiseConfig(AbstractConfig):
+    """Configure the noise fitting and subtraction for the spectrum fitting task. If enabled, the
+    noise is fitted with the specified model and subtracted from the spectrum before fitting the
+    peaks.
+
+    Attributes
+    ----------
+    task: str
+        Name of the task, to perform it must be 'noise'.
+    subtract: bool, optional
+        Whether to perform the noise fitting and subtraction. Default is False.
+    nbins: int, optional
+        Number of bins to use for the noise fitting. By default, the first non-zero bin is set to
+        zero. Default is 4.
+    model: str, optional
+        The model to use for the noise fitting. It must be a model defined in aptapy.models.
+        Default is "Exponential".
+    freeze: dict[str, float], optional
+        A dictionary of the parameters to freeze during the noise fitting. Default is {}, meaning
+        no parameters are frozen.
+    """
+    task: Literal["noise"]
+    subtract: bool = NoiseDefaults.subtract
+    nbins: int = NoiseDefaults.nbins
+    model: str = NoiseDefaults.model
+    freeze: dict[str, float] = NoiseDefaults.freeze
+
+
 class FitSpecConfig(AbstractConfig):
     """Perform the spectrum fitting for each source file using the model and the fit parameters
     defined in the fitting subtasks.
@@ -118,7 +156,7 @@ class FitSpecConfig(AbstractConfig):
     ----------
     task: str
         Name of the task, to perform it must be 'fit_spec'.
-    subtasks: list[FitSubtask]
+    subtasks: list[FitSubtaskConfig]
         List of fitting subtasks to perform. Each subtask defines the model and the fit parameters
         to use for the fit.
     """
@@ -194,6 +232,7 @@ class GainConfig(AbstractConfig):
     xaxis: str = TaskDefaults.xaxis
     subtasks: list[FitSubtaskConfig] | None = Field(default=None)
     show: bool = TaskDefaults.show
+
 
 class DriftConfig(AbstractConfig):
     """Perform the analysis of the gain as a function of drift voltage for each source file using
@@ -450,7 +489,7 @@ class StyleConfig(BaseModel):
 
 
 TaskType = CalibrationConfig | FitSpecConfig | GainConfig | ResolutionConfig | \
-    ResolutionEscapeConfig | PlotConfig | DriftConfig | CompareConfig
+    ResolutionEscapeConfig | PlotConfig | DriftConfig | CompareConfig | NoiseConfig
 
 
 class AppConfig(BaseModel):
@@ -523,6 +562,19 @@ class AppConfig(BaseModel):
             raise RuntimeError("No calibration task found in the pipeline. Make sure to specify a" \
             " calibration task.")
         return _config
+
+    @property
+    def noise(self) -> NoiseConfig | None:
+        """Extract the noise configuration from the pipeline configuration and return it. If no
+        noise task is found in the pipeline, None is returned.
+
+        Returns
+        -------
+        NoiseConfig | None
+            The noise task configuration extracted from the pipeline configuration, or None if no
+            noise task is found.
+        """
+        return next((t for t in self.pipeline if isinstance(t, NoiseConfig)), None)
 
     @property
     def fit_spec(self) -> FitSpecConfig | None:

@@ -38,6 +38,25 @@ Setting the `show` key to `true` for the `gain` and `resolution` tasks, the outp
 ![Fit](figures/folder_gain.png)
 ![Fit](figures/folder_resolution.png)
 
+
+## Noise spectrum fitting
+
+In this example, a folder containing only a source file and a calibration file is analyzed to characterize the noise spectrum. The configuration file is similar to the previous ones, with the exception of the models used in the fitting subtasks. When a model different from a Gaussian or a line forest is used, the tool fits all the spectrum ì, with the exception of the first bin with positive content (this is useful for this task because the first bin doesn't have all the statistics, due to the MCA threshold). The analysis is performed with the following configuration file.
+
+```yaml
+--8<-- "docs/examples/noise_fit_config.yaml"
+```
+
+To run the analysis, the command is the same of all the others folder analysis:
+
+```bash
+mugpd path_config path_folder
+```
+
+In this example, the noise spectrum is fitted with an exponential model and a power-law model. The resulting plot is the following:
+
+![Fit](figures/noise_fit.png)
+
 ## Analysis of gain variation with time
 
 In this example, the analysis of a folder to study the gain variation with time is performed. The gain is estimated during the task, so it is not necessary to execute a `gain` task before. The gain is fitted in a fixed range with a composite model `StrecthedExponential + Constant`.

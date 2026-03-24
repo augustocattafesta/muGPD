@@ -13,6 +13,7 @@ from .config import (
     DriftConfig,
     FitSubtaskConfig,
     GainConfig,
+    NoiseConfig,
     PlotConfig,
     PlotStyleConfig,
     ResolutionConfig,
@@ -139,8 +140,65 @@ def calibration(context: Context) -> Context:
     return context
 
 
-def fit_peak(context: Context, subtask: FitSubtaskConfig) -> Context:
-    """Perform the fitting of a spectral emission line in the source data.
+def subtract_noise(context: Context, noise_config: NoiseConfig) -> Context:
+    """Subtract the noise from the spectrum fitting with the model specified in the configuration
+    file. The noise model is fitted to the first bins of the spectrum and then is subtracted.
+
+    Parameters
+    ----------
+    context : Context
+        The context object containing the source data in `context.last_source` as an instance
+        of the class SourceFile.
+    noise_config : NoiseConfig
+        The noise configuration instance containing the parameters for the noise fitting and
+        subtraction.
+    
+    Returns
+    -------
+    context : Context
+        The updated context object containing the noise-subtracted spectrum in
+        `context.last_source.hist`.
+    """
+    # Access the last source data added to the context and get the histogram
+    source = context.last_source
+    if source.noise_subtracted is False:
+        hist = source.hist
+        content = hist.content
+        bin_centers = hist.bin_centers()
+        noise_model = load_class(noise_config.model)[0]()
+        log.info(f"Subtracting noise from the spectrum fitting with {noise_model.name()} model")
+        # Freeze the parameters of the noise model according to the configuration
+        for param, value in noise_config.freeze.items():
+            attr = getattr(noise_model, param)
+            attr.freeze(value)
+            log.info(f"Freezing parameter {param} to value {value} in noise" \
+                      f" {noise_model.name()} model")
+        # Find the index of the bins with content > 0
+        idx = np.where(content > 0)[0]
+        # Fit the first n bins with an exponential
+        x_noise = bin_centers[idx][1:noise_config.nbins + 1]
+        y_noise = content[idx][1:noise_config.nbins + 1]
+        noise_model.fit(x_noise, y_noise, sigma=np.sqrt(y_noise))
+        log.info(f"Noise model parameters: {noise_model.parameter_values()}")
+        # Subtract the noise model from the histogram
+        subtracted_content = content.copy()
+        # Set the content of the first bin to 0 because the MCA threshold lose some counts
+        subtracted_content[idx[0]] = 0
+        # Subtract the noise model from the bins with content > 0, starting from the second bin
+        subtracted_content[idx[1:]] -= noise_model(bin_centers[idx[1:]])
+        # Set any negative content to 0
+        subtracted_content[subtracted_content < 0] = 0
+        hist.set_content(subtracted_content)
+        # Updating the source object to avoid multiple noise subtractions if multiple fitting
+        # subtasks are defined in the configuration file
+        source.noise_subtracted = True
+        log.success("Noise subtraction completed")
+    return context
+
+
+def _fit_peak(context: Context, subtask: FitSubtaskConfig) -> Context:
+    """Perform the fitting of a spectral emission line in the source data. If requested, the noise
+    can be fitted and subtracted from the spectrum before fitting the peak. 
 
     Parameters
     ----------
@@ -156,17 +214,19 @@ def fit_peak(context: Context, subtask: FitSubtaskConfig) -> Context:
     context : Context
         The updated context object containing the fit results.
     """
-    # Access target, model and fit parameters
+    # Access target
     target = subtask.target
-    model = load_class(subtask.model)[0]()
-    log.info(f"Fitting target {target} with model {model.__class__.__name__}")
-    fit_pars = subtask.fit_pars
     # Access the last source data added to the context and get the histogram
     source = context.last_source
     hist = source.hist
+    bin_centers = hist.bin_centers()
+    # Load the model and fit parameters
+    model = load_class(subtask.model)[0]()
+    fit_pars = subtask.fit_pars
+    log.info(f"Fitting target {target} with model {model.name()}")
     # Without a proper initialization of xmin and xmax the fit doesn't converge
     kwargs = fit_pars.model_dump()
-    x_peak = hist.bin_centers()[hist.content > 0][5:][np.argmax(hist.content[hist.content > 0][5:])]
+    x_peak = bin_centers[hist.content > 0][5:][np.argmax(hist.content[hist.content > 0][5:])]
     if fit_pars.xmin == float("-inf") and fit_pars.xmax == float("inf"):
         kwargs["xmin"] = x_peak - 0.3 * np.sqrt(x_peak)
         kwargs["xmax"] = x_peak + 0.3 * np.sqrt(x_peak)
@@ -184,17 +244,80 @@ def fit_peak(context: Context, subtask: FitSubtaskConfig) -> Context:
         line_val = reference_energy / model.status.correlated_pars[1]
         sigma = model.status.correlated_pars[2]
     else:
-        raise TypeError(f"Model of type {type(model)} not supported in fit_peak task")
+        raise TypeError(f"Model of type {model.name()} not supported in fit_peak task")
     log.success(f"Fitting of target {target} completed")
     # Update the context with the fit results
     target_ctx = TargetContext(target, line_val, sigma, source.voltage, model)
     target_ctx.energy = context.config.source.energy
     # Add the fwhm to the target context
-    fwhm = SIGMA_TO_FWHM * sigma
-    target_ctx.fwhm_val = fwhm
+    target_ctx.fwhm_val = SIGMA_TO_FWHM * sigma
     # Save the target context in the main context
     context.add_target_ctx(source, target_ctx)
     return context
+
+
+def _fit_noise(context: Context, subtask: FitSubtaskConfig) -> Context:
+    """Perform the fitting of the noise in a source data containing only noise.
+
+    Parameters
+    ----------
+    context : Context
+        The context object containing the source data in `context.last_source` as an instance
+        of the class SourceFile.
+    subtask : FitSubtaskConfig
+        The configuration of the fitting subtask, containing the target name, the model class and
+        the fit parameters.
+    
+    Returns
+    -------
+    context : Context
+        The updated context object containing the fit results.
+    """
+    target = subtask.target
+    # Access the source data and get the histogram
+    source = context.last_source
+    hist = source.hist
+    content = hist.content
+    bin_centers = source.hist.bin_centers()
+    # Find the index of the bins with content > 0 and fit the noise model to those bins. We
+    # exclude the first bin because the MCA threshold lose some counts. thus is lower than the
+    # second bin.
+    idx = np.where(content > 0)[0]
+    x_noise = bin_centers[idx[1:]]
+    y_noise = content[idx[1:]]
+    # Load the model and fit parameters and then fit the data
+    model = load_class(subtask.model)[0]()
+    fit_pars = subtask.fit_pars.model_dump(exclude={"num_sigma_left", "num_sigma_right"})
+    model.fit(x_noise, y_noise, sigma=np.sqrt(y_noise), **fit_pars)
+    # Update the context with the fit results
+    target_ctx = TargetContext(target, 0., 0., 0., model)
+    context.add_target_ctx(source, target_ctx)
+    return context
+
+
+def fit_spec(context: Context, subtask: FitSubtaskConfig) -> Context:
+    """Fit the spectrum of a source file with the model specified in the subtask configuration.
+    This function is a wrapper to dispatch the fitting to the appropriate fit function based on
+    the fit model type. In case the model is a Gaussian or a Fe55Forest, the fitting is performed
+    with the `_fit_peak` function, otherwise it is performed with the `_fit_noise` function.
+
+    Parameters
+    ----------
+    context : Context
+        The context object containing the source data in `context.last_source` as an instance
+        of the class SourceFile.
+    subtask : FitSubtaskConfig
+        The configuration of the fitting subtask, containing the target name, the model class and
+        the fit parameters.
+    
+    Returns
+    -------
+    context : Context
+        The updated context object containing the fit results.
+    """
+    if subtask.model in ["Gaussian", "Fe55Forest"]:
+        return _fit_peak(context, subtask)
+    return _fit_noise(context, subtask)
 
 
 def gain_task(context: Context, task: GainConfig) -> Context:
@@ -597,9 +720,11 @@ def plot_spectrum(context: Context, task: PlotConfig) -> Context:
                 target_ctx = context.target_ctx(file_name, target)
                 model = target_ctx.model
                 model_label = get_label(task.task_labels, target_ctx)
+                if style["fit_output"] and model_label is None:
+                    model_label = f"{model.name()}"
                 # Save the model for automatic xrange calculation
                 models.append(model)
-                model.plot(label=model_label)
+                model.plot(label=model_label, fit_output=style["fit_output"])
         # Set the x-axis range
         plt.xlim(task.xrange)
         if task.xrange is None:
@@ -613,6 +738,8 @@ def plot_spectrum(context: Context, task: PlotConfig) -> Context:
         # Add the figure to the context
         context.add_figure(file_name, fig)
         plt.tight_layout()
+        plt.xscale(style["xscale"])
+        plt.yscale(style["yscale"])
         if not task.show:
             plt.close(fig)
     return context
