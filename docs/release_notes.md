@@ -2,6 +2,8 @@
 ----------------
 
 - Small changes to the webapp.
+- Pull requests merged and issues closed:
+    - [PR #69](https://github.com/augustocattafesta/muGPD/pull/69)
 
 ### Version 0.1.0 (2026-03-24)
 
