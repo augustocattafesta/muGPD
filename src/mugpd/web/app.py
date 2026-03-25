@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 from dataclasses import dataclass
+from datetime import datetime
 from functools import lru_cache
 from html import escape
 from pathlib import Path
@@ -31,6 +32,7 @@ from .logic import (
     sort_figure_rows,
     sort_run_rows,
 )
+from .page_template import render_home_page
 
 pil_image: Any | None
 try:
@@ -42,6 +44,7 @@ except ImportError:  # pragma: no cover
 
 
 THUMBNAIL_CACHE_DIR = Path.home() / ".cache" / "mugpd" / "thumbnails"
+RUNS_PER_PAGE = 10
 
 
 @dataclass(frozen=True)
@@ -103,6 +106,8 @@ class BrowserWebApp:
         img_per_page = request.args.get("img_per_page", default=24, type=int) or 24
         if img_per_page not in {24, 48, 96}:
             img_per_page = 24
+        run_page = max(1, request.args.get("run_page", default=1, type=int) or 1)
+        search_query = request.args.get("q", "").strip()
 
         sort_state = normalize_sort(
             request.args.get("sort_by", "created"),
@@ -123,6 +128,7 @@ class BrowserWebApp:
                 date=filter_state.dates,
                 wafer=filter_state.wafers,
                 structure=filter_state.structures,
+                q=search_query or None,
                 sort_by=sort_state.by,
                 sort_dir=sort_state.direction,
                 manifest=str(rec.manifest_path),
@@ -130,9 +136,10 @@ class BrowserWebApp:
             rows.append(
                 {
                     "run_id": rec.run_id,
+                    "manifest": str(rec.manifest_path),
                     "details_url": details_url,
                     "mode": rec.mode,
-                    "created": rec.created_at or "Unknown",
+                    "created": self._format_created_at(rec.created_at),
                     "dates": ", ".join(rec.acquisition_dates)
                     if rec.acquisition_dates
                     else "N/A",
@@ -143,11 +150,32 @@ class BrowserWebApp:
                 }
             )
 
+        if search_query:
+            query_norm = search_query.lower()
+            rows = [
+                row
+                for row in rows
+                if query_norm in " ".join(
+                    [
+                        row["run_id"],
+                        row["created"],
+                        row["dates"],
+                        row["wafers"],
+                        row["structures"],
+                    ]
+                ).lower()
+            ]
+
         sort_run_rows(rows, sort_state)
 
+        n_runs = len(rows)
+        run_total_pages = max(1, (n_runs + RUNS_PER_PAGE - 1) // RUNS_PER_PAGE)
+        run_page = min(max(1, run_page), run_total_pages)
+        run_start = (run_page - 1) * RUNS_PER_PAGE
+        run_end = run_start + RUNS_PER_PAGE
+        page_rows = rows[run_start:run_end]
+
         selected_manifest = request.args.get("manifest", "")
-        if not selected_manifest and records:
-            selected_manifest = str(records[0].manifest_path)
 
         run_html = ""
         if selected_manifest:
@@ -167,8 +195,13 @@ class BrowserWebApp:
             available=available,
             filters=filter_state,
             sort_state=sort_state,
-            n_runs=len(records),
-            runs_table_rows=rows,
+            n_runs=n_runs,
+            run_page=run_page,
+            run_total_pages=run_total_pages,
+            run_start=run_start,
+            run_end=min(run_end, n_runs),
+            search_query=search_query,
+            runs_table_rows=page_rows,
             run_html=run_html,
         )
 
@@ -222,12 +255,246 @@ class BrowserWebApp:
 
         return send_file(thumb_path, mimetype="image/jpeg")
 
+    @staticmethod
+    def _format_created_at(value: str | None) -> str:
+        if not value:
+            return "Unknown"
+
+        text = value.strip()
+        if not text:
+            return "Unknown"
+
+        normalized = text.replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(normalized)
+            return parsed.strftime("%d %b %Y, %H:%M:%S")
+        except ValueError:
+            pass
+
+        for fmt in (
+            "%Y-%m-%d %H:%M:%S.%f",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S.%f",
+            "%Y-%m-%dT%H:%M:%S",
+        ):
+            try:
+                parsed = datetime.strptime(text, fmt)
+                return parsed.strftime("%d %b %Y, %H:%M:%S")
+            except ValueError:
+                continue
+
+        if "." in text:
+            return text.split(".", maxsplit=1)[0].replace("T", " ")
+        return text.replace("T", " ")
+
+    @staticmethod
+    def _render_numeric_pager(
+        current_page: int,
+        total_pages: int,
+        link_for_page: Any,
+    ) -> str:
+        if total_pages <= 1:
+            return ""
+
+        pages: set[int] = {1, total_pages}
+        for page in range(current_page - 2, current_page + 3):
+            if 1 <= page <= total_pages:
+                pages.add(page)
+        ordered_pages = sorted(pages)
+
+        links: list[str] = []
+        prev_page = max(1, current_page - 1)
+        next_page = min(total_pages, current_page + 1)
+
+        if current_page > 1:
+            links.append(
+                f'<a class="pager-arrow" href="{escape(link_for_page(prev_page))}" '
+                'aria-label="Previous page">&larr;</a>'
+            )
+        else:
+            links.append('<span class="pager-arrow disabled">&larr;</span>')
+
+        last = None
+        for page in ordered_pages:
+            if last is not None and page - last > 1:
+                links.append('<span class="pager-ellipsis">...</span>')
+            if page == current_page:
+                links.append(f'<span class="pager-page current">{page}</span>')
+            else:
+                links.append(
+                    f'<a class="pager-page" href="{escape(link_for_page(page))}">{page}</a>'
+                )
+            last = page
+
+        if current_page < total_pages:
+            links.append(
+                f'<a class="pager-arrow" href="{escape(link_for_page(next_page))}" '
+                'aria-label="Next page">&rarr;</a>'
+            )
+        else:
+            links.append('<span class="pager-arrow disabled">&rarr;</span>')
+
+        return '<div class="pager-links">' + "".join(links) + "</div>"
+
+    @staticmethod
+    def _format_summary_value(value: Any) -> str:
+        if value in (None, "", "Unknown"):
+            return "-"
+        if isinstance(value, float):
+            return f"{value:.6g}"
+        if isinstance(value, list):
+            if not value:
+                return "-"
+            first = value[0]
+            return BrowserWebApp._format_summary_value(first)
+        return str(value)
+
+    @staticmethod
+    def _source_match_score(
+        source_name: str,
+        payload: dict[str, Any],
+        figure_context: str,
+    ) -> int:
+        score = 0
+        source_stem = Path(source_name).stem.lower()
+        source_base = Path(source_name).name.lower()
+        if source_stem and source_stem in figure_context:
+            score += 10
+        if source_base and source_base in figure_context:
+            score += 10
+
+        voltage = payload.get("voltage")
+        if isinstance(voltage, (int, float)) and f"b{int(voltage)}" in figure_context:
+            score += 3
+
+        drift_voltage = payload.get("drift_voltage")
+        if isinstance(drift_voltage, (int, float)) and f"d{int(drift_voltage)}" in figure_context:
+            score += 3
+
+        structure = payload.get("structure")
+        if isinstance(structure, str) and structure.lower() in figure_context:
+            score += 1
+
+        wafer = payload.get("wafer")
+        if isinstance(wafer, str) and wafer.lower() in figure_context:
+            score += 1
+
+        return score
+
+    def _time_from_source(self, source_payload: dict[str, Any]) -> str:
+        raw_time = source_payload.get("time_from_start")
+        if raw_time in (None, ""):
+            raw_time = source_payload.get("time")
+        if raw_time in (None, ""):
+            raw_time = source_payload.get("times")
+        if raw_time in (None, ""):
+            raw_time = source_payload.get("real_time")
+
+        if raw_time in (None, ""):
+            return "-"
+
+        if isinstance(raw_time, (int, float)) and source_payload.get("real_time") == raw_time:
+            return self._format_summary_value(float(raw_time) / 3600.0)
+
+        return self._format_summary_value(raw_time)
+
+    def _figure_summary(
+        self,
+        fig: dict[str, Any],
+        run: AnalysisRun,
+    ) -> dict[str, str]:
+        sources = run.sources()
+        figure_context = " ".join(
+            [
+                str(fig.get("file", "")),
+                str(fig.get("name", "")),
+                str(fig.get("source", "")),
+                str(fig.get("source_name", "")),
+            ]
+        ).lower()
+
+        source_payload: dict[str, Any] = {}
+        best_score = -1
+        for source_name, payload in sources.items():
+            if not isinstance(payload, dict):
+                continue
+            score = self._source_match_score(str(source_name), payload, figure_context)
+            if score > best_score:
+                best_score = score
+                source_payload = payload
+
+        if best_score <= 0 and len(sources) == 1:
+            only_payload = next(iter(sources.values()))
+            if isinstance(only_payload, dict):
+                source_payload = only_payload
+
+        def get_value(*keys: str) -> str:
+            for key in keys:
+                if key in source_payload:
+                    return self._format_summary_value(source_payload.get(key))
+            return "-"
+
+        chip_value = get_value("chip", "wafer")
+        structure_value = get_value("structure")
+        if chip_value == "-":
+            run_wafers = run.wafers()
+            chip_value = run_wafers[0] if len(run_wafers) == 1 else "-"
+        if structure_value == "-":
+            run_structures = run.structures()
+            structure_value = run_structures[0] if len(run_structures) == 1 else "-"
+
+        time_value = self._time_from_source(source_payload)
+
+        return {
+            "back": get_value("voltage", "back_voltage", "back", "voltages"),
+            "drift": get_value("drift_voltage", "drift", "drift_voltages"),
+            "pressure": get_value("pressure", "pressures"),
+            "time": time_value,
+            "chip": chip_value,
+            "structure": structure_value,
+        }
+
+    @staticmethod
+    def _is_spectrum_figure(fig: dict[str, Any]) -> bool:
+        text = " ".join(
+            [
+                str(fig.get("name", "")),
+                str(fig.get("file", "")),
+                str(fig.get("folder", "")),
+            ]
+        ).lower()
+
+        non_spectrum_tokens = (
+            "calibration",
+            "gain",
+            "resolution",
+            "resoution",
+            "rate",
+            "drift",
+            "compare",
+            "comparison",
+            "noise",
+            "trend",
+            "fit",
+        )
+        if any(token in text for token in non_spectrum_tokens):
+            return False
+
+        if "live_data" in text or "spectrum" in text or "spectra" in text:
+            return True
+        return "_b" in text
+
     def _render_page(
         self,
         available: dict[str, list[str]],
         filters: FilterState,
         sort_state: Any,
         n_runs: int,
+        run_page: int,
+        run_total_pages: int,
+        run_start: int,
+        run_end: int,
+        search_query: str,
         runs_table_rows: list[dict[str, str]],
         run_html: str,
     ) -> str:
@@ -264,6 +531,7 @@ class BrowserWebApp:
                 arrow = " ↑" if sort_state.direction == "asc" else " ↓"
             link = (
                 f"/?filters=1&sort_by={escape(field)}&sort_dir={escape(next_dir)}"
+                + (f"&q={escape(search_query)}" if search_query else "")
                 + "".join(f"&date={escape(v)}" for v in filters.dates)
                 + "".join(f"&wafer={escape(v)}" for v in filters.wafers)
                 + "".join(f"&structure={escape(v)}" for v in filters.structures)
@@ -277,16 +545,15 @@ class BrowserWebApp:
             "".join(
                 [
                     "<tr>",
-                    '<td><a href="',
+                    '<td class="col-run"><a href="',
                     escape(row["details_url"]),
                     '">',
                     escape(row["run_id"]),
                     "</a></td>",
-                    f"<td>{escape(row['mode'])}</td>",
-                    f"<td>{escape(row['created'])}</td>",
-                    f"<td>{escape(row['dates'])}</td>",
-                    f"<td>{escape(row['wafers'])}</td>",
-                    f"<td>{escape(row['structures'])}</td>",
+                    f"<td class=\"col-created\">{escape(row['created'])}</td>",
+                    f"<td class=\"col-dates\">{escape(row['dates'])}</td>",
+                    f"<td class=\"col-wafers\">{escape(row['wafers'])}</td>",
+                    f"<td class=\"col-structures\">{escape(row['structures'])}</td>",
                     "</tr>",
                 ]
             )
@@ -294,217 +561,75 @@ class BrowserWebApp:
         ]
         if rows_html:
             table_html = (
-                '<table class="runs-table"><thead><tr>'
-                f"<th>{sort_header_link('run_id', 'Run')}</th>"
-                f"<th>{sort_header_link('mode', 'Mode')}</th>"
-                f"<th>{sort_header_link('created', 'Created')}</th>"
-                f"<th>{sort_header_link('dates', 'Acquisition date(s)')}</th>"
-                f"<th>{sort_header_link('wafers', 'Wafer(s)')}</th>"
-                f"<th>{sort_header_link('structures', 'Structure(s)')}</th>"
-                "</tr></thead><tbody>"
+                '<div class="runs-table-wrap"><table class="runs-table"><thead><tr>'
+                f"<th class=\"col-run\">{sort_header_link('run_id', 'Run')}</th>"
+                f"<th class=\"col-created\">{sort_header_link('created', 'Created')}</th>"
+                f"<th class=\"col-dates\">{sort_header_link('dates', 'Acquisition date(s)')}</th>"
+                f"<th class=\"col-wafers\">{sort_header_link('wafers', 'Wafer(s)')}</th>"
+                + (
+                    f"<th class=\"col-structures\">"
+                    f"{sort_header_link('structures', 'Structure(s)')}</th>"
+                )
+                + "</tr></thead><tbody>"
                 + "".join(rows_html)
-                + "</tbody></table>"
+                + "</tbody></table></div>"
             )
         else:
             table_html = '<p class="muted">No runs found with current filters.</p>'
 
-        return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>muGPD Analysis Browser</title>
-  <style>
-    :root {{
-      --bg: #f3efe4;
-      --card: #fffef9;
-      --ink: #102027;
-      --muted: #5d6f74;
-      --accent: #0b6e4f;
-      --border: #d8d1bf;
-      --error: #b42318;
-    }}
-    * {{ box-sizing: border-box; }}
-    body {{
-      margin: 0;
-      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
-      color: var(--ink);
-      background:
-        radial-gradient(circle at 100% 0%, #dff4e9 0, transparent 36%),
-        radial-gradient(circle at 0% 100%, #f9e6cd 0, transparent 35%),
-        var(--bg);
-    }}
-    .layout {{ max-width: 1400px; margin: 0 auto; padding: 24px; display: grid; gap: 16px; }}
-    h1 {{ margin: 0; letter-spacing: 0.03em; }}
-    h2 {{ margin: 0 0 12px 0; font-size: 1.2rem; }}
-    h3 {{ margin: 0 0 10px 0; font-size: 1.05rem; }}
-        .card {{
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 16px;
-        }}
-        .toolbar {{ display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }}
-    .field {{ display: grid; gap: 6px; min-width: 220px; }}
-    .field label {{ font-weight: 600; font-size: 0.9rem; }}
-    select[multiple] {{
-      min-height: 120px;
-      max-height: 180px;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      padding: 8px;
-      background: #fff;
-      font-family: inherit;
-    }}
-    .btn {{
-      border: 0;
-      border-radius: 10px;
-      background: var(--accent);
-      color: #fff;
-      font-weight: 700;
-      padding: 10px 14px;
-      cursor: pointer;
-      text-decoration: none;
-      display: inline-block;
-    }}
-    .btn.secondary {{ background: #3f4e4f; }}
-    table {{ width: 100%; border-collapse: collapse; }}
-        th, td {{
-            border-bottom: 1px solid var(--border);
-            padding: 8px;
-            text-align: left;
-            vertical-align: top;
-        }}
-    th {{ background: #f5f1e5; font-size: 0.92rem; }}
-    .sort-link {{ color: inherit; text-decoration: none; font-weight: 700; }}
-    .sort-link:hover {{ text-decoration: underline; }}
-    .muted {{ color: var(--muted); margin: 0; }}
-    .error {{ color: var(--error); font-weight: 600; }}
-        .fig-grid {{
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-            gap: 12px;
-        }}
-        .figure-card {{
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 10px;
-            background: #ffffff;
-        }}
-        .figure-card img {{
-            width: 100%;
-            height: 170px;
-            object-fit: contain;
-            background: #f9f9f9;
-            border-radius: 8px;
-        }}
-    .figure-meta {{ margin-top: 8px; font-size: 0.88rem; color: var(--muted); }}
-        .pager {{
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            align-items: center;
-            margin: 10px 0 14px 0;
-        }}
-    .pager-links {{ display: flex; gap: 10px; align-items: center; }}
-    .pager a {{ color: var(--accent); text-decoration: none; font-weight: 700; }}
-        details {{
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 10px 12px;
-            background: #fff;
-        }}
-    details + details {{ margin-top: 10px; }}
-    summary {{ cursor: pointer; font-weight: 700; }}
-  </style>
-</head>
-<body>
-  <main class="layout">
-    <section class="card">
-      <h1>muGPD Analysis Browser</h1>
-    </section>
+        run_pager = ""
+        if n_runs > 0:
+            base_args = {
+                "filters": "1",
+                "sort_by": sort_state.by,
+                "sort_dir": sort_state.direction,
+                "date": filters.dates,
+                "wafer": filters.wafers,
+                "structure": filters.structures,
+                "q": search_query or None,
+            }
 
-    <section class="card">
-      <h2>Filters</h2>
-      <form method="get" class="toolbar">
-        <input type="hidden" name="filters" value="1" />
-        <div class="field">
-          <label for="date">Acquisition date</label>
-                    <select id="date" name="date" multiple data-toggle-multi>
-                        {date_options}
-                    </select>
-        </div>
-        <div class="field">
-          <label for="wafer">Wafer</label>
-                    <select id="wafer" name="wafer" multiple data-toggle-multi>
-                        {wafer_options}
-                    </select>
-        </div>
-        <div class="field">
-          <label for="structure">Structure</label>
-                    <select id="structure" name="structure" multiple data-toggle-multi>
-                        {structure_options}
-                    </select>
-        </div>
-        <input type="hidden" name="sort_by" value="{escape(sort_state.by)}" />
-        <input type="hidden" name="sort_dir" value="{escape(sort_state.direction)}" />
-        <button class="btn" type="submit">Apply filters</button>
-        <a class="btn secondary" href="/?refresh=1">Remove filters</a>
-      </form>
-    </section>
+            def run_page_link(page_num: int) -> str:
+                page_num = min(max(1, page_num), run_total_pages)
+                return url_for("_home_view", **base_args, run_page=page_num)
 
-    <section class="card">
-      <h2>Runs ({n_runs})</h2>
-      {table_html}
-    </section>
+            run_numeric_pages = self._render_numeric_pager(
+                current_page=run_page,
+                total_pages=run_total_pages,
+                link_for_page=run_page_link,
+            )
 
-    {run_html}
-  </main>
-  <script>
-    (function () {{
-      const selects = document.querySelectorAll('select[multiple][data-toggle-multi]');
-      selects.forEach((select) => {{
-        let lastIndex = -1;
-        select.addEventListener('mousedown', (event) => {{
-          const option = event.target;
-          if (!(option instanceof HTMLOptionElement)) {{
-            return;
-          }}
-          event.preventDefault();
-          const options = Array.from(select.options);
-          const clickedIndex = options.indexOf(option);
-          if (clickedIndex < 0) {{
-            return;
-          }}
-          if (event.shiftKey && lastIndex >= 0) {{
-            const start = Math.min(lastIndex, clickedIndex);
-            const end = Math.max(lastIndex, clickedIndex);
-            for (let idx = start; idx <= end; idx += 1) {{
-              options[idx].selected = true;
-            }}
-          }} else if (event.ctrlKey || event.metaKey) {{
-            option.selected = !option.selected;
-          }} else {{
-            options.forEach((entry) => {{
-              entry.selected = (entry === option);
-            }});
-          }}
-          lastIndex = clickedIndex;
-          select.focus();
-        }});
-      }});
-    }})();
-  </script>
-</body>
-</html>"""
+            run_pager = "".join(
+                [
+                    '<div class="pager">',
+                    (
+                        f'<span class="muted">Runs '
+                        f"{run_start + 1}-{run_end} of {n_runs}</span>"
+                    ),
+                    run_numeric_pages,
+                    "</div>",
+                ]
+            )
+
+        return render_home_page(
+            date_options=date_options,
+            wafer_options=wafer_options,
+            structure_options=structure_options,
+            search_query=search_query,
+            sort_by=sort_state.by,
+            sort_dir=sort_state.direction,
+            n_runs=n_runs,
+            run_pager=run_pager,
+            table_html=table_html,
+            run_html=run_html,
+        )
 
     def _render_run_section(self, manifest_path: Path, img_page: int, img_per_page: int) -> str:
         run = AnalysisRun(manifest_path)
 
         meta_rows = [
             ["Analysis run", run.run_id],
-            ["Analyzed", run.created_at or "Unknown"],
-            ["Mode", run.mode],
+            ["Analyzed", self._format_created_at(run.created_at)],
             ["Acquisition date(s)", ", ".join(run.acquisition_dates()) or "N/A"],
             ["Wafer(s)", ", ".join(run.wafers()) or "N/A"],
             ["Structure(s)", ", ".join(run.structures()) or "N/A"],
@@ -522,10 +647,9 @@ class BrowserWebApp:
             "</section>"
         )
 
-    def _render_figures(self, run: AnalysisRun, img_page: int, img_per_page: int) -> str:
+    def _collect_available_figures(self, run: AnalysisRun) -> list[dict[str, Any]]:
         figures = run.data.get("artifacts", {}).get("figures", [])
-        cards: list[str] = []
-        available_figures: list[dict[str, str | None]] = []
+        available_figures: list[dict[str, Any]] = []
         for fig in figures:
             file_rel = fig.get("file", "")
             if not file_rel:
@@ -538,15 +662,100 @@ class BrowserWebApp:
             if resolved is None:
                 continue
             _, normalized_rel = resolved
+            show_summary = self._is_spectrum_figure(fig)
+            summary = self._figure_summary(fig, run) if show_summary else None
             available_figures.append(
                 {
                     "label": fig.get("name", Path(file_rel).name),
                     "folder": fig.get("folder"),
                     "rel": normalized_rel,
+                    "summary": summary,
+                    "show_summary": show_summary,
                 }
             )
 
         sort_figure_rows(available_figures)
+        return available_figures
+
+    @staticmethod
+    def _build_figure_summary(summary: dict[str, str]) -> tuple[str, str]:
+        summary_rows = [
+            ("Back [V]", summary["back"]),
+            ("Drift [V]", summary["drift"]),
+            ("Pressure [mbar]", summary["pressure"]),
+            ("Time [h]", summary["time"]),
+            ("Chip", summary["chip"]),
+            ("Structure", summary["structure"]),
+        ]
+        summary_data = "||".join(f"{k}::{v}" for k, v in summary_rows)
+        summary_html = "".join(
+            [
+                '<table class="figure-summary"><tbody>',
+                "".join(
+                    [
+                        (
+                            "<tr>"
+                            f"<th>{escape(k)}</th>"
+                            f"<td>{escape(str(v))}</td>"
+                            "</tr>"
+                        )
+                        for k, v in summary_rows
+                    ]
+                ),
+                "</tbody></table>",
+            ]
+        )
+        return summary_html, summary_data
+
+    def _render_figure_card(self, item: dict[str, Any], run: AnalysisRun) -> str:
+        normalized_rel = str(item["rel"])
+        folder = item["folder"]
+
+        thumb_url = url_for(
+            "_thumbnail_view",
+            manifest=str(run.manifest_path),
+            file=normalized_rel,
+            folder=folder,
+        )
+        image_url = url_for(
+            "_image_view",
+            manifest=str(run.manifest_path),
+            file=normalized_rel,
+            folder=folder,
+        )
+        label = str(item["label"])
+        folder_display = folder or "-"
+        caption = f"{label} - {normalized_rel}"
+
+        if item.get("show_summary"):
+            summary = cast(dict[str, str], item.get("summary"))
+            summary_html, summary_data = self._build_figure_summary(summary)
+        else:
+            summary_html = f"<strong>{escape(label)}</strong>"
+            summary_data = ""
+
+        return "".join(
+            [
+                '<article class="figure-card">',
+                (
+                    f'<a class="figure-open" href="{escape(image_url)}" '
+                    f'data-full="{escape(image_url)}" '
+                    f'data-caption="{escape(caption)}" '
+                    f'data-summary="{escape(summary_data)}">'
+                ),
+                f'<img src="{escape(thumb_url)}" loading="lazy" alt="{escape(label)}" />',
+                "</a>",
+                summary_html,
+                '<div class="figure-meta">',
+                f"file: {escape(normalized_rel)}<br />",
+                f"folder: {escape(folder_display)}",
+                "</div>",
+                "</article>",
+            ]
+        )
+
+    def _render_figures(self, run: AnalysisRun, img_page: int, img_per_page: int) -> str:
+        available_figures = self._collect_available_figures(run)
 
         total = len(available_figures)
         if total == 0:
@@ -566,40 +775,13 @@ class BrowserWebApp:
             args_multi["img_page"] = [str(page_num)]
             return url_for("_home_view", **cast(dict[str, Any], args_multi))
 
-        for item in page_figures:
-            normalized_rel = str(item["rel"])
-            folder = item["folder"]
+        numeric_pages = self._render_numeric_pager(
+            current_page=current_page,
+            total_pages=total_pages,
+            link_for_page=page_link,
+        )
 
-            thumb_url = url_for(
-                "_thumbnail_view",
-                manifest=str(run.manifest_path),
-                file=normalized_rel,
-                folder=folder,
-            )
-            image_url = url_for(
-                "_image_view",
-                manifest=str(run.manifest_path),
-                file=normalized_rel,
-                folder=folder,
-            )
-            label = str(item["label"])
-            folder_display = folder or "-"
-            cards.append(
-                "".join(
-                    [
-                        '<article class="figure-card">',
-                        f'<a href="{escape(image_url)}" target="_blank" rel="noopener">',
-                        f'<img src="{escape(thumb_url)}" loading="lazy" alt="{escape(label)}" />',
-                        "</a>",
-                        f"<strong>{escape(label)}</strong>",
-                        '<div class="figure-meta">',
-                        f"file: {escape(normalized_rel)}<br />",
-                        f"folder: {escape(folder_display)}",
-                        "</div>",
-                        "</article>",
-                    ]
-                )
-            )
+        cards = [self._render_figure_card(item, run) for item in page_figures]
 
         per_page_parts: list[str] = []
         for value in (24, 48, 96):
@@ -622,18 +804,19 @@ class BrowserWebApp:
                     f'<span class="muted">Images '
                     f"{start_idx + 1}-{min(end_idx, total)} of {total}</span>"
                 ),
-                '<div class="pager-links">',
-                f'<a href="{escape(page_link(1))}">First</a>',
-                f'<a href="{escape(page_link(current_page - 1))}">Prev</a>',
-                f'<strong>Page {current_page}/{total_pages}</strong>',
-                f'<a href="{escape(page_link(current_page + 1))}">Next</a>',
-                f'<a href="{escape(page_link(total_pages))}">Last</a>',
-                '</div>',
+                numeric_pages,
                 f'<div class="pager-links">Per page: {per_page_links}</div>',
                 '</div>',
             ]
         )
-        return "<h3>Images</h3>" + pager_html + '<div class="fig-grid">' + "".join(cards) + "</div>"
+        return (
+            "<h3>Images</h3>"
+            + pager_html
+            + '<div class="fig-grid">'
+            + "".join(cards)
+            + "</div>"
+            + pager_html
+        )
 
     def _render_tasks(self, run: AnalysisRun) -> str:
         sections: list[str] = ["<h3>Task results</h3>"]
@@ -740,17 +923,17 @@ class BrowserWebApp:
 
 
 def create_app(results_dir: Path) -> Any:
-    """Create the Flask app instance for the given results root."""
+    """Create the app instance for the given results root."""
 
     return BrowserWebApp(results_dir).create()
 
 
 def main() -> None:
-    """CLI entrypoint for starting the Flask web server."""
+    """CLI entrypoint for starting the web server."""
 
     parser = argparse.ArgumentParser(
         prog="mugpd-web",
-        description="Run the muGPD HTML browser (Flask) as an alternative to Streamlit.",
+        description="Run the muGPD HTML browser for analysis results.",
     )
     parser.add_argument(
         "--results",
@@ -759,7 +942,7 @@ def main() -> None:
     )
     parser.add_argument("--host", default="127.0.0.1", help="Host interface for the web server.")
     parser.add_argument("--port", type=int, default=7860, help="Port for the web server.")
-    parser.add_argument("--debug", action="store_true", help="Enable Flask debug mode.")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode.")
     args = parser.parse_args()
 
     results_dir = Path(args.results)
