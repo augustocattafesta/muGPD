@@ -1,0 +1,45 @@
+# Set the properties of the source and detector. This part is optional if the source
+# is Fe55 and if the gas is Ar
+source:
+  energy: 5.9
+  w: 26.0
+
+# Define the analysis pipeline
+pipeline:
+  # Execute the calibration
+  - task: calibration
+    show: false
+
+  - task: fit_spec
+    subtasks:
+      # Fit the main line of the spectrum with a double Gaussian
+      - target: main
+        model: Fe55Forest
+
+    # Estimate the gain using the main line fit  
+  - task: gain
+    target: main
+
+    # Estimate the resolution of the main line using Fe55Forest fit 
+  - task: resolution
+    target: main
+  
+  - task: plot
+    # Plot the spectrum in the region around the main line showing both fits
+    targets:
+      - main
+    # Show the gain and resolution results in the legend
+    task_labels:
+      - gain
+      - resolution
+    # Scale the xrange on the left to show the escape peak, which of Fe55 is
+    # located at about half the charge of the main peak.
+    xmin_factor: 0.5
+
+# Configure the style of the spectrum plot
+style:
+  tasks:
+    plot:
+      title: $^{55}$Fe Spectrum
+      label: Data label
+      legend_label: Example legend label

@@ -1,0 +1,23 @@
+pipeline:
+  # Execute the calibration
+  - task: calibration
+    show: false
+
+  - task: fit_spec
+    subtasks:
+      # Fit the main line of the spectrum with a double Gaussian.
+      - target: main
+        model: Fe55Forest
+
+  # Execute the gain_trend task on the main line of the spectrum
+  - task: gain
+    target: main
+    xaxis: time
+    # Fit the gain trend
+    subtasks:
+      - target: charging
+        model: StretchedExponential + Constant  # Fit with a composite model
+        # Set the fit parameters
+        fit_pars:
+          xmax: 3.8                   # Right limit for fit range
+          p0: [25., 0.6, 0.7, 40.]    # Initial parameters for specified fit model

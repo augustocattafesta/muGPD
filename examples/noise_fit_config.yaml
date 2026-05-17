@@ -1,0 +1,29 @@
+pipeline:
+  # Execute the calibration
+  - task: calibration
+    show: false
+
+  - task: fit_spec
+    subtasks:
+      # Fit the noise spectrum with an exponential model.
+      - target: noise_exp
+        model: Exponential
+
+      # Fit it with a power law model.
+      - target: noise_pl
+        model: PowerLaw
+
+  - task: plot
+    # Plot the noise spectrum with the fit results.
+    targets:
+      - noise_exp
+      - noise_pl
+
+# Adjust the plot style
+style:
+    tasks:
+      plot:
+        # Show all the fit output to see the best-fit parameters.
+        fit_output: true
+        yscale: log
+        xscale: linear
