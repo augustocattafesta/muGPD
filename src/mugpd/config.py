@@ -362,6 +362,7 @@ class PlotDefaults:
     """
     task_labels: list[str] | None = None
     voltage: bool = False
+    drift: bool = False
     xrange: list[float] | None = Field(None, min_length=2, max_length=2)
     xmin_factor: float = 1.
     xmax_factor: float = 1.
@@ -383,7 +384,11 @@ class PlotConfig(AbstractConfig):
         List of analysis task result labels to show in the plot legend. If None, no result is
         shown in the legend. Default is None.
     voltage: bool, optional
-        Whether to show the source voltage information in the plot legend. Default is False.
+        Whether to show the detector back voltage information in the plot legend.
+        Default is False.
+    drift: bool, optional
+        Whether to show the detector drift voltage information in the plot legend.
+        Default is False.
     xrange: list[float] | None
         Range of x values to show in the plot. If None, the range is automatically determined from
         the best-fit results, taking 5 sigma around the peak(s) position(s). Default is None.
@@ -398,6 +403,7 @@ class PlotConfig(AbstractConfig):
     targets: list[str] | None = None
     task_labels: list[str] | None = PlotDefaults.task_labels
     voltage: bool = PlotDefaults.voltage
+    drift: bool = PlotDefaults.drift
     xrange: list[float] | None = PlotDefaults.xrange
     xmin_factor: float = PlotDefaults.xmin_factor
     xmax_factor: float = PlotDefaults.xmax_factor
@@ -417,6 +423,7 @@ class PlotStyleDefaults:
     marker: str = "."
     linestyle: str = "-"
     color: str | None = None
+    grayscale: bool = False
     fit_output: bool = False
     annotate_min: bool = False
 
@@ -452,6 +459,9 @@ class PlotStyleConfig(AbstractConfig):
     color : str
         Set the color of the marker and of the line. See matplotlib docs for the possible choices.
         Default is `black`.
+    grayscale : bool
+        Whether to use a grayscale color scheme for the plot. If True, the color setting is ignored
+        and a grayscale color scheme is used instead. Default is False.
     fit_output : bool
         Whether to show the best-fit parameters and information in the legend. Default is False.
     annotate_min : bool
@@ -467,6 +477,7 @@ class PlotStyleConfig(AbstractConfig):
     marker: str = PlotStyleDefaults.marker
     linestyle: str = PlotStyleDefaults.linestyle
     color: str | None = PlotStyleDefaults.color
+    grayscale: bool = PlotStyleDefaults.grayscale
     fit_output: bool = PlotStyleDefaults.fit_output
     annotate_min: bool = PlotStyleDefaults.annotate_min
 
