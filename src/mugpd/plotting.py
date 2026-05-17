@@ -4,6 +4,7 @@ import aptapy.models
 import numpy as np
 from aptapy.modeling import AbstractFitModel, FitModelSum
 from aptapy.plotting import last_line_color, plt
+from cycler import cycler
 from uncertainties import unumpy
 
 from .context import TargetContext
@@ -18,10 +19,25 @@ XAXIS_LABELS = dict(
 
 
 YAXIS_LABELS = {
-        "gain": "Gain",
-        "resolution": r"$\Delta$E/E",
+        "gain": "Charge multiplication factor",
+        "resolution": r"Energy resolution @ 5.9 keV (FWHM)",
         "drift": "Drift Voltage [V]",
     }
+
+
+def get_ylabel(quantity: str, energy_kev: float | None = None) -> str:
+    """Return a y-axis label for a given quantity.
+
+    Some labels depend on runtime configuration (e.g. resolution energy), so this helper keeps
+    formatting logic in one place.
+    """
+    if quantity == "resolution":
+        energy = 5.9 if energy_kev is None else energy_kev
+        return f"Energy resolution @ {energy:.1f} keV (FWHM)"
+    return YAXIS_LABELS.get(quantity, quantity)
+
+
+GRAYSCALE_COLORS = cycler(color=["black"])
 
 
 def write_legend(label: str | None, *axs: plt.Axes | None, loc: str = "best" ) -> None:

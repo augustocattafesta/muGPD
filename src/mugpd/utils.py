@@ -3,6 +3,7 @@ signal.
 """
 
 import importlib
+import pathlib
 
 import aptapy
 import aptapy.modeling
@@ -239,3 +240,20 @@ def load_class(class_path: str) -> list[type[aptapy.modeling.AbstractFitModel]]:
     """
     class_paths = [p.strip() for p in class_path.split("+")]
     return [_load_single_class(p) for p in class_paths]
+
+
+def folder_key_from_path(path: pathlib.Path) -> str:
+    """Best-effort folder key from an input data path.
+
+    For typical layouts like `.../data/<folder>/<file>.mca` we return `<folder>`. Otherwise we
+    fall back to the parent directory name.
+    """
+    try:
+        parts = path.parts
+        if "data" in parts:
+            idx = parts.index("data") + 1
+            if idx < len(parts) - 1:
+                return parts[idx]
+    except (ValueError, IndexError):
+        pass
+    return path.parent.name

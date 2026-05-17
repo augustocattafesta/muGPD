@@ -1,6 +1,8 @@
 """Analysis tasks.
 """
 
+from typing import Any
+
 import aptapy.models
 import numpy as np
 from aptapy.modeling import AbstractFitModel
@@ -16,16 +18,18 @@ from .config import (
     NoiseConfig,
     PlotConfig,
     PlotStyleConfig,
+    PlotStyleDefaults,
     ResolutionConfig,
     ResolutionEscapeConfig,
 )
 from .context import Context, FoldersContext, TargetContext
 from .plotting import (
+    GRAYSCALE_COLORS,
     XAXIS_LABELS,
-    YAXIS_LABELS,
     get_label,
     get_model_label,
     get_xrange,
+    get_ylabel,
     plot_compare_task,
     plot_task,
     write_legend,
@@ -37,6 +41,7 @@ from .utils import (
     energy_resolution,
     energy_resolution_escape,
     find_peaks_iterative,
+    folder_key_from_path,
     gain,
     load_class,
 )
@@ -467,7 +472,7 @@ def resolution_task(context: Context, task: ResolutionConfig) -> Context:
     style = context.config.style.tasks.get(name, PlotStyleConfig()).model_dump()
     plot_kwargs = dict(
         xlabel=XAXIS_LABELS[xaxis],
-        ylabel=r"$\Delta$E/E",
+        ylabel=f"Energy resolution @ {context.config.source.energy:.1f} keV (FWHM)",
         fig_name=f"resolution_{target}",
         show=task.show,
         **style)
@@ -601,7 +606,7 @@ def compare(context: FoldersContext, task: CompareConfig) -> FoldersContext:
         plt.title(task_style["title"])
     # Set the labels and the axis scales
     plt.xlabel(XAXIS_LABELS[task.xaxis])
-    plt.ylabel(YAXIS_LABELS.get(quantity, quantity))
+    plt.ylabel(get_ylabel(quantity, context.config.source.energy))
     plt.xscale(task_style["xscale"])
     plt.yscale(task_style["yscale"])
     # Write the legend and show the plot
@@ -699,19 +704,32 @@ def plot_spectrum(context: Context, task: PlotConfig) -> Context:
     context : Context
         The context object (in future it will be updated with the figures).
     """
+    # pylint: disable=too-many-branches
     # Get the file names from the sources keys
     name = task.task
     targets = task.targets
     file_names = context.file_names
     style = context.config.style.tasks.get(name, PlotStyleConfig()).model_dump()
+    # If the plot style is grayscale, modify the histogram plot style and the
+    # color cycle for the models.
+    hist_kwargs: dict[str, Any] = dict()
+    if style["grayscale"]:
+        plt.rcParams['axes.prop_cycle'] = GRAYSCALE_COLORS
+        hist_kwargs = dict(histtype='step', alpha=0.5)
     # Iterate over all files and plot the spectra with fitted models, if desired
     for file_name in file_names:
         source = context.source(file_name)
+        folder_style_cfg = None
+        if style["title"] is None or style["legend_label"] is None:
+            folder_key = folder_key_from_path(source.file_path)
+            folder_style_cfg = context.config.style.folders.get(folder_key)
         # Create the plot figure and plot the spectrum and set the title
         fig = plt.figure(f"{source.file_path.stem}_{targets}")
         if style["title"] is not None:
             plt.title(style["title"])
-        source.hist.plot(label=style["label"])
+        elif folder_style_cfg is not None and folder_style_cfg.title is not None:
+            plt.title(folder_style_cfg.title)
+        source.hist.plot(label=style["label"], **hist_kwargs)
         # Plot the fitted models for the specified targets and get labels
         models = []
         if targets is not None:
@@ -729,10 +747,17 @@ def plot_spectrum(context: Context, task: PlotConfig) -> Context:
         if task.xrange is None:
             _xrange = get_xrange(source, models)
             plt.xlim(_xrange[0] * task.xmin_factor, _xrange[1] * task.xmax_factor)
+        # Legend title: prefer task legend_label; otherwise allow using per-folder `style.folders`
+        # `label` as a convenient legend header.
         _label = style["legend_label"]
+        if (_label is None and folder_style_cfg is not None and
+            folder_style_cfg.label not in (None, PlotStyleDefaults.label)):
+            _label = folder_style_cfg.label
         # If voltage info is requested, add it to the legend
         if task.voltage and _label is not None:
-            _label += f"\nBack: {source.voltage:>4.0f} V\nDrift: {source.drift_voltage:>4.0f} V"
+            _label += f"\nBack: {source.voltage:>4.0f} V"
+        if task.drift and _label is not None:
+            _label += f"\nDrift: {source.drift_voltage:>4.0f} V"
         write_legend(_label, loc=style["legend_loc"])
         # Add the figure to the context
         context.add_figure(file_name, fig)
