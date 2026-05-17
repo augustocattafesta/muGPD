@@ -1,10 +1,10 @@
 from typing import Any
 
 import aptapy.models
-from cycler import cycler
 import numpy as np
 from aptapy.modeling import AbstractFitModel, FitModelSum
 from aptapy.plotting import last_line_color, plt
+from cycler import cycler
 from uncertainties import unumpy
 
 from .context import TargetContext

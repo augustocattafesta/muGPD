@@ -254,6 +254,6 @@ def folder_key_from_path(path: pathlib.Path) -> str:
             idx = parts.index("data") + 1
             if idx < len(parts) - 1:
                 return parts[idx]
-    except Exception:  # pragma: no cover
+    except (ValueError, IndexError):
         pass
     return path.parent.name

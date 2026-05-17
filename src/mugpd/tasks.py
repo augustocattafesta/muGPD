@@ -1,6 +1,8 @@
 """Analysis tasks.
 """
 
+from typing import Any
+
 import aptapy.models
 import numpy as np
 from aptapy.modeling import AbstractFitModel
@@ -15,8 +17,8 @@ from .config import (
     GainConfig,
     NoiseConfig,
     PlotConfig,
-    PlotStyleDefaults,
     PlotStyleConfig,
+    PlotStyleDefaults,
     ResolutionConfig,
     ResolutionEscapeConfig,
 )
@@ -24,10 +26,10 @@ from .context import Context, FoldersContext, TargetContext
 from .plotting import (
     GRAYSCALE_COLORS,
     XAXIS_LABELS,
-    get_ylabel,
     get_label,
     get_model_label,
     get_xrange,
+    get_ylabel,
     plot_compare_task,
     plot_task,
     write_legend,
@@ -39,9 +41,9 @@ from .utils import (
     energy_resolution,
     energy_resolution_escape,
     find_peaks_iterative,
+    folder_key_from_path,
     gain,
     load_class,
-    folder_key_from_path
 )
 
 XAXIS_DICT = dict(
@@ -702,6 +704,7 @@ def plot_spectrum(context: Context, task: PlotConfig) -> Context:
     context : Context
         The context object (in future it will be updated with the figures).
     """
+    # pylint: disable=too-many-branches
     # Get the file names from the sources keys
     name = task.task
     targets = task.targets
@@ -709,7 +712,7 @@ def plot_spectrum(context: Context, task: PlotConfig) -> Context:
     style = context.config.style.tasks.get(name, PlotStyleConfig()).model_dump()
     # If the plot style is grayscale, modify the histogram plot style and the
     # color cycle for the models.
-    hist_kwargs = dict()
+    hist_kwargs: dict[str, Any] = dict()
     if style["grayscale"]:
         plt.rcParams['axes.prop_cycle'] = GRAYSCALE_COLORS
         hist_kwargs = dict(histtype='step', alpha=0.5)
@@ -747,9 +750,9 @@ def plot_spectrum(context: Context, task: PlotConfig) -> Context:
         # Legend title: prefer task legend_label; otherwise allow using per-folder `style.folders`
         # `label` as a convenient legend header.
         _label = style["legend_label"]
-        if _label is None:
-            if folder_style_cfg is not None and folder_style_cfg.label not in (None, PlotStyleDefaults.label):
-                _label = folder_style_cfg.label
+        if (_label is None and folder_style_cfg is not None and
+            folder_style_cfg.label not in (None, PlotStyleDefaults.label)):
+            _label = folder_style_cfg.label
         # If voltage info is requested, add it to the legend
         if task.voltage and _label is not None:
             _label += f"\nBack: {source.voltage:>4.0f} V"
